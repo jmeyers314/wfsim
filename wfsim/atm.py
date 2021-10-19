@@ -37,7 +37,8 @@ def make_atmosphere(
     kcrit=0.2,
     screen_size=819.2,
     screen_scale=0.1,
-    nproc=6
+    nproc=6,
+    verbose=False
 ):
     target_FWHM = (
         raw_seeing/galsim.arcsec *
@@ -45,10 +46,11 @@ def make_atmosphere(
         (wavelength/500.0)**(-0.3)
     )
 
-    print(f"raw seeing = {raw_seeing/galsim.arcsec}")
-    print(f"airmass factor = {airmass**0.6}")
-    print(f"wavelength factor = {(wavelength/500.0)**(-0.3)}")
-    print(f"target FWHM = {target_FWHM}")
+    if verbose:
+        print(f"raw seeing = {raw_seeing/galsim.arcsec}")
+        print(f"airmass factor = {airmass**0.6}")
+        print(f"wavelength factor = {(wavelength/500.0)**(-0.3)}")
+        print(f"target FWHM = {target_FWHM}")
 
     gsrng = galsim.BaseDeviate(rng.bit_generator.random_raw() % 2**63)
     ud = galsim.UniformDeviate(gsrng)
