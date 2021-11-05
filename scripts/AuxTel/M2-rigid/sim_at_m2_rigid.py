@@ -113,8 +113,8 @@ for isim in tqdm.trange(4, NSIM):
             pbar.update(flux)
 
     if not DEVELOP:
-        intra_simulator.add_background(rng, background)
-        extra_simulator.add_background(rng, background)
+        intra_simulator.add_background(background, rng)
+        extra_simulator.add_background(background, rng)
 
     if PLOT:
         import matplotlib.pyplot as plt

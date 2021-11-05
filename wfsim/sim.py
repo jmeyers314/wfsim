@@ -339,17 +339,15 @@ class SimpleSimulator:
         pa = self.rays_to_pa(rays)
         self.sensor.accumulate(pa, self.image)
 
-    def add_background(self, rng, level):
+    def add_background(self, level, rng):
         """ Add background flux to image
 
         Parameters
         ----------
-        rng : np.random.Generator
         level : float
             Mean sky level
+        rng : np.random.Generator
         """
         bd = galsim.BaseDeviate(rng.bit_generator.random_raw() % 2**63)
         gd = galsim.GaussianDeviate(bd, sigma=np.sqrt(level))
         gd.add_generate(self.image.array)
-
-
