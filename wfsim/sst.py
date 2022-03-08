@@ -29,8 +29,8 @@ def _node_to_grid(nodex, nodey, nodez, grid_coords):
     nx = len(x)
     ny = len(y)
     out = np.zeros([4, ny, nx])
-    dx = np.mean(np.diff(x))
-    dy = np.mean(np.diff(y))
+    dx = np.mean(np.diff(x))*1e-1
+    dy = np.mean(np.diff(y))*1e-1
     x, y = np.meshgrid(x, y)
     out[0] = interp(x, y)
     out[1] = (interp(x+dx, y) - interp(x-dx, y))/(2*dx)
@@ -221,78 +221,139 @@ class SSTFactory:
         m1m3TyGrad=0.0,       # 2-sigma spans +/- 0.4C
         m1m3TzGrad=0.0,       # 2-sigma spans +/- 0.1C
         m1m3TrGrad=0.0,       # 2-sigma spans +/- 0.1C
-        m1m3ForceError=None,  # ts_phosim uses 0.05 (?)
         m2TzGrad=0.0,
         m2TrGrad=0.0,
         camTB=None,
         dof=None,
-        forces=None,
+        doM1M3Pert=False,
+        doM2Pert=False,
+        doCamPert=False,
+        _omit_dof_grid=False,
+        _omit_dof_zk=False,
     ):
+        optic = self.fiducial
+
         if dof is None:
             dof = np.zeros(50)
-        # hard code these for now
-        # indices are over FEA nodes
-        m1m3_fea_dz = np.zeros(5256)
-        m2_fea_dz = np.zeros(15984)
-
-        if zenith_angle is not None:
-            m1m3_fea_dz = self._m1m3_gravity(zenith_angle)
-            m2_fea_dz = self._m2_gravity(zenith_angle)
-
-        if any([m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad]):
-            m1m3_fea_dz += self._m1m3_temperature(
-                m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad
-            )
-
-        if any([m2TzGrad, m2TrGrad]):
-            m2_fea_dz += self._m2_temperature(
-                m2TzGrad, m2TrGrad
-            )
 
         # order is z, dzdx, dzdy, d2zdxdy
+        # These can get set either through grav/temp perturbations or through
+        # dof
         m1_grid = np.zeros((4, 204, 204))
-        m2_grid = np.zeros((4, 204, 204))
         m3_grid = np.zeros((4, 204, 204))
         m1m3_zk = np.zeros(29)
+
+        if doM1M3Pert:
+            # hard code for now
+            # indices are over FEA nodes
+            m1m3_fea_dz = np.zeros(5256)
+            if zenith_angle is not None:
+                m1m3_fea_dz = self._m1m3_gravity(zenith_angle)
+
+            if any([m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad]):
+                m1m3_fea_dz += self._m1m3_temperature(
+                    m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad
+                )
+
+            if np.any(m1m3_fea_dz):
+                bx, by, idx1, idx3 = self.m1m3_fea_coords
+                zBasis = galsim.zernike.zernikeBasis(
+                    28, -bx, by, R_outer=4.18
+                )
+                m1m3_zk, *_ = np.linalg.lstsq(zBasis.T, m1m3_fea_dz, rcond=None)
+                zern = galsim.zernike.Zernike(m1m3_zk, R_outer=4.18)
+                m1m3_fea_dz -= zern(-bx, by)
+
+                m1_grid = _node_to_grid(
+                    bx[idx1], by[idx1], m1m3_fea_dz[idx1], self.m1_grid_coords
+                )
+
+                m3_grid = _node_to_grid(
+                    bx[idx3], by[idx3], m1m3_fea_dz[idx3], self.m3_grid_coords
+                )
+                m1_grid *= -1
+                m3_grid *= -1
+                m1m3_zk *= -1
+
+        # M1M3 bending modes
+        if np.any(dof[10:30] != 0):
+            if not _omit_dof_grid:
+                m1_bend = _fitsCache("M1_bend_grid.fits.gz")
+                m3_bend = _fitsCache("M3_bend_grid.fits.gz")
+                m1_grid += np.tensordot(m1_bend, dof[10:30], axes=[[1], [0]])
+                m3_grid += np.tensordot(m3_bend, dof[10:30], axes=[[1], [0]])
+
+            if not _omit_dof_zk:
+                m1m3_zk += np.dot(dof[10:30], _fitsCache("M13_bend_zk.fits.gz"))
+
+        if np.any([m1m3_zk]) or np.any(m1_grid):
+            optic = optic.withSurface(
+                'M1',
+                batoid.Sum([
+                    optic['M1'].surface,
+                    batoid.Zernike(m1m3_zk, R_outer=4.18),
+                    batoid.Bicubic(*self.m1_grid_coords, *m1_grid)
+                ])
+            )
+        if np.any([m1m3_zk]) or np.any(m3_grid):
+            optic = optic.withSurface(
+                'M3',
+                batoid.Sum([
+                    optic['M3'].surface,
+                    batoid.Zernike(m1m3_zk, R_outer=4.18),
+                    batoid.Bicubic(*self.m3_grid_coords, *m3_grid)
+                ])
+            )
+
+        m2_grid = np.zeros((4, 204, 204))
         m2_zk = np.zeros(29)
 
-        if np.any(m1m3_fea_dz):
-            bx, by, idx1, idx3 = self.m1m3_fea_coords
-            zBasis = galsim.zernike.zernikeBasis(
-                28, -bx, by, R_outer=4.18
+        if doM2Pert:
+            # hard code for now
+            # indices are over FEA nodes
+            m2_fea_dz = np.zeros(15984)
+            if zenith_angle is not None:
+                m2_fea_dz = self._m2_gravity(zenith_angle)
+
+            if any([m2TzGrad, m2TrGrad]):
+                m2_fea_dz += self._m2_temperature(
+                    m2TzGrad, m2TrGrad
+                )
+
+            if np.any(m2_fea_dz):
+                bx, by = self.m2_fea_coords
+                zBasis = galsim.zernike.zernikeBasis(
+                    28, -bx, by, R_outer=1.71
+                )
+                m2_zk, *_ = np.linalg.lstsq(zBasis.T, m2_fea_dz, rcond=None)
+                zern = galsim.zernike.Zernike(m2_zk, R_outer=1.71)
+                m2_fea_dz -= zern(-bx, by)
+
+                m3_grid = _node_to_grid(
+                    bx, by, m2_fea_dz, self.m2_grid_coords
+                )
+
+                m2_grid *= -1
+                m2_zk *= -1
+
+        if np.any(dof[30:50] != 0):
+            if not _omit_dof_grid:
+                m2_bend = _fitsCache("M2_bend_grid.fits.gz")
+                m2_grid += np.tensordot(m2_bend, dof[30:50], axes=[[1], [0]])
+
+            if not _omit_dof_zk:
+                m2_zk += np.dot(dof[30:50], _fitsCache("M2_bend_zk.fits.gz"))
+
+        if np.any([m2_zk]) or np.any(m2_grid):
+            optic = optic.withSurface(
+                'M2',
+                batoid.Sum([
+                    optic['M2'].surface,
+                    batoid.Zernike(m2_zk, R_outer=1.71),
+                    batoid.Bicubic(*self.m2_grid_coords, *m2_grid)
+                ])
             )
-            m1m3_zk, *_ = np.linalg.lstsq(zBasis.T, m1m3_fea_dz, rcond=None)
-            zern = galsim.zernike.Zernike(m1m3_zk, R_outer=4.18)
-            m1m3_fea_dz -= zern(-bx, by)
 
-            m1_grid = _node_to_grid(
-                bx[idx1], by[idx1], m1m3_fea_dz[idx1], self.m1_grid_coords
-            )
-
-            m3_grid = _node_to_grid(
-                bx[idx3], by[idx3], m1m3_fea_dz[idx3], self.m3_grid_coords
-            )
-
-        if np.any(m2_fea_dz):
-            bx, by = self.m2_fea_coords
-            zBasis = galsim.zernike.zernikeBasis(
-                28, -bx, by, R_outer=1.71
-            )
-            m2_zk, *_ = np.linalg.lstsq(zBasis.T, m2_fea_dz, rcond=None)
-            zern = galsim.zernike.Zernike(m2_zk, R_outer=1.71)
-            m2_fea_dz -= zern(-bx, by)
-
-            m3_grid = _node_to_grid(
-                bx, by, m2_fea_dz, self.m2_grid_coords
-            )
-
-        m1_grid *= -1
-        m2_grid *= -1
-        m3_grid *= -1
-        m1m3_zk *= -1
-        m2_zk *= -1
-
-        optic = self.fiducial
         if np.any(dof[0:3] != 0):
             optic = optic.withGloballyShiftedOptic(
                 "M2",
@@ -318,98 +379,54 @@ class SSTFactory:
                 rx @ ry
             )
 
-        # M1M3 bending modes
-        if np.any(dof[10:30] != 0):
-            m1_bend = _fitsCache("M1_bend_grid.fits.gz")
-            m3_bend = _fitsCache("M3_bend_grid.fits.gz")
-            m1_grid += np.tensordot(m1_bend, dof[10:30], axes=[[1], [0]])
-            m3_grid += np.tensordot(m3_bend, dof[10:30], axes=[[1], [0]])
-
-            m1m3_zk += np.dot(dof[10:30], _fitsCache("M13_bend_zk.fits.gz"))
-
-        if np.any(dof[30:50] != 0):
-            m2_bend = _fitsCache("M2_bend_grid.fits.gz")
-            m2_grid += np.tensordot(m2_bend, dof[30:50], axes=[[1], [0]])
-
-            m2_zk += np.dot(dof[30:50], _fitsCache("M2_bend_zk.fits.gz"))
-
-        if np.any([m1m3_zk]) or np.any(m1_grid):
-            optic = optic.withSurface(
-                'M1',
-                batoid.Sum([
-                    optic['M1'].surface,
-                    batoid.Zernike(m1m3_zk, R_outer=4.18),
-                    batoid.Bicubic(*self.m1_grid_coords, *m1_grid)
-                ])
-            )
-        if np.any([m2_zk]) or np.any(m2_grid):
-            optic = optic.withSurface(
-                'M2',
-                batoid.Sum([
-                    optic['M2'].surface,
-                    batoid.Zernike(m2_zk, R_outer=1.71),
-                    batoid.Bicubic(*self.m2_grid_coords, *m2_grid)
-                ])
-            )
-        if np.any([m1m3_zk]) or np.any(m3_grid):
-            optic = optic.withSurface(
-                'M3',
-                batoid.Sum([
-                    optic['M3'].surface,
-                    batoid.Zernike(m1m3_zk, R_outer=4.18),
-                    batoid.Bicubic(*self.m3_grid_coords, *m3_grid)
-                ])
-            )
-
-        # Camera
-        cam_data = [
-            ('L1S1', 'L1_entrance', 0.775),
-            ('L1S2', 'L1_exit', 0.775),
-            ('L2S1', 'L2_entrance', 0.551),
-            ('L2S2', 'L2_exit', 0.551),
-            ('L3S1', 'L3_entrance', 0.361),
-            ('L3S2', 'L3_exit', 0.361),
-        ]
-        for tname, bname, radius in cam_data:
-            data = _fitsCache(tname+"zer.fits.gz")
-            grav_zk = data[0, 3:] * (np.cos(zenith_angle) - 1)
-            grav_zk += (
-                data[1, 3:] * np.cos(rotation_angle) +
-                data[2, 3:] * np.sin(rotation_angle)
-            ) * np.sin(zenith_angle)
-            # subtract pre-compensated grav...
-            TB = np.clip(camTB, data[3, 2], data[10, 2])
-            fidx = np.interp(camTB, data[3:, 2], np.arange(len(data[3:, 2])))+3
-            idx = int(np.floor(fidx))
-            whi = fidx - idx
-            wlo = 1 - whi
-            temp_zk = wlo * data[idx, 3:] + whi * data[idx+1, 3:]
-
-            # subtract reference temperature zk (0 deg C is idx=5)
-            temp_zk -= data[5, 3:]
-
-            surf_zk = grav_zk + temp_zk
-
-            # remap Andy -> Noll Zernike indices
-            zIdxMapping = [
-                1, 3, 2, 5, 4, 6, 8, 9, 7, 10, 13, 14, 12, 15, 11, 19, 18, 20,
-                17, 21, 16, 25, 24, 26, 23, 27, 22, 28
+        if doCamPert:
+            cam_data = [
+                ('L1S1', 'L1_entrance', 0.775),
+                ('L1S2', 'L1_exit', 0.775),
+                ('L2S1', 'L2_entrance', 0.551),
+                ('L2S2', 'L2_exit', 0.551),
+                ('L3S1', 'L3_entrance', 0.361),
+                ('L3S2', 'L3_exit', 0.361),
             ]
-            surf_zk = surf_zk[[x - 1 for x in zIdxMapping]]
-            surf_zk *= -1e-3  # mm -> m
-            # tsph -> batoid 0-index offset
-            surf_zk = np.concatenate([[0], surf_zk])
+            for tname, bname, radius in cam_data:
+                data = _fitsCache(tname+"zer.fits.gz")
+                grav_zk = data[0, 3:] * (np.cos(zenith_angle) - 1)
+                grav_zk += (
+                    data[1, 3:] * np.cos(rotation_angle) +
+                    data[2, 3:] * np.sin(rotation_angle)
+                ) * np.sin(zenith_angle)
+                # subtract pre-compensated grav...
+                TB = np.clip(camTB, data[3, 2], data[10, 2])
+                fidx = np.interp(camTB, data[3:, 2], np.arange(len(data[3:, 2])))+3
+                idx = int(np.floor(fidx))
+                whi = fidx - idx
+                wlo = 1 - whi
+                temp_zk = wlo * data[idx, 3:] + whi * data[idx+1, 3:]
 
-            optic = optic.withSurface(
-                bname,
-                batoid.Sum([
-                    optic[bname].surface,
-                    batoid.Zernike(-surf_zk, R_outer=radius)
-                ])
-            )
+                # subtract reference temperature zk (0 deg C is idx=5)
+                temp_zk -= data[5, 3:]
+
+                surf_zk = grav_zk + temp_zk
+
+                # remap Andy -> Noll Zernike indices
+                zIdxMapping = [
+                    1, 3, 2, 5, 4, 6, 8, 9, 7, 10, 13, 14, 12, 15, 11, 19, 18, 20,
+                    17, 21, 16, 25, 24, 26, 23, 27, 22, 28
+                ]
+                surf_zk = surf_zk[[x - 1 for x in zIdxMapping]]
+                surf_zk *= -1e-3  # mm -> m
+                # tsph -> batoid 0-index offset
+                surf_zk = np.concatenate([[0], surf_zk])
+
+                optic = optic.withSurface(
+                    bname,
+                    batoid.Sum([
+                        optic[bname].surface,
+                        batoid.Zernike(-surf_zk, R_outer=radius)
+                    ])
+                )
 
         return optic
-
 
         # TODO:
         #  - M1M3 force error...
