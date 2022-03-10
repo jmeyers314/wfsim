@@ -1,3 +1,4 @@
+import os
 import batoid
 import numpy as np
 from wfsim import SSTFactory
@@ -131,6 +132,8 @@ fieldXY = np.array([
 ])
 
 factory = SSTFactory(batoid.Optic.fromYaml("LSST_g_500.yaml"))
+
+os.makedirs('opd', exist_ok=True)
 
 # Do fiducial telescope first.
 for ifield, (fieldX, fieldY) in enumerate(tqdm(fieldXY)):
