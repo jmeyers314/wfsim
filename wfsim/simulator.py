@@ -31,6 +31,10 @@ class SimpleSimulator:
         Meters
     shape : (int, int)
         Sensor shape
+    offset : (float, float)
+        Center of image in focal plane (meters).
+    name : str
+        Name of Rubin sensor.  Overrides shape and offset kwargs.
     rng : np.random.Generator
     debug : bool
     """
@@ -43,6 +47,8 @@ class SimpleSimulator:
         pixel_scale=10e-6,
         shape=(4000, 4072),
         rng=None,
+        offset=(0.0, 0.0),
+        name=None,
         debug=False
     ):
         self.observation = observation
@@ -81,6 +87,17 @@ class SimpleSimulator:
             H2O_pressure=self.observation['H2O_pressure'],
         )
 
+        if name is not None:
+            from astropy.table import Table
+            from pathlib import Path
+            path = Path(__file__).parents[0]
+            path = path / "data" / "sensors.txt"
+            table = Table.read(path, format="ascii.fixed_width")
+            row = table[table['name'] == name][0]
+            offset = row['cenx']*1e-3, row['ceny']*1e-3
+            shape = row['nx'], row['ny']
+
+        self.offset = offset
         self.sensor = galsim.Sensor()  # don't worry about BF here.
         self.image = galsim.Image(*shape)
         self.image.setCenter(0, 0)
@@ -286,6 +303,8 @@ class SimpleSimulator:
         pa : galsim.PhotonArray
         """
         pa = galsim.PhotonArray(len(rays))
+        rays.x[:] -= self.offset[0]
+        rays.y[:] -= self.offset[1]
         pa.x = rays.x / self.pixel_scale
         pa.y = rays.y / self.pixel_scale
         pa.dxdz = rays.vx / rays.vz
