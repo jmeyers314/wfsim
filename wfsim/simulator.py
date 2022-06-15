@@ -88,19 +88,102 @@ class SimpleSimulator:
         )
 
         if name is not None:
-            from astropy.table import Table
-            from pathlib import Path
-            path = Path(__file__).parents[0]
-            path = path / "data" / "sensors.txt"
-            table = Table.read(path, format="ascii.fixed_width")
-            row = table[table['name'] == name][0]
-            offset = row['cenx']*1e-3, row['ceny']*1e-3
-            shape = row['nx'], row['ny']
+                self.set_name(name)
+        else:
+            self.offset = np.array(offset)
+            self.image = galsim.Image(*shape)
 
-        self.offset = offset
         self.sensor = galsim.Sensor()  # don't worry about BF here.
-        self.image = galsim.Image(*shape)
+
         self.image.setCenter(0, 0)
+
+        # construct the WCS
+        self._construct_wcs()
+
+    def set_name(self, name: str):
+        """Set the name of the sensor, according to the Rubin naming conventions.
+
+        Note that this method will create a new image with the position and shape
+        of the corresponding Rubin sensor.
+
+        Parameters
+        ----------
+        name: str
+            Name of the Rubin sensor. For a list of possible names, see
+            https://github.com/jmeyers314/wfsim/blob/main/wfsim/data/sensors.txt
+        """
+        from pathlib import Path
+
+        from astropy.table import Table
+
+        # save the name
+        self.sensor_name = name
+
+        # load the sensor data from sensors.txt
+        path = Path(__file__).parents[0]
+        path = path / "data" / "sensors.txt"
+        table = Table.read(path, format="ascii.fixed_width")
+
+        # pull out the row corresponding to the given name
+        row = table[table["name"] == name][0]
+
+        # get the center of the chip, and convert millimeters -> meters
+        self.offset = np.array([row["cenx"], row["ceny"]]) * 1e-3
+
+        # get the x and y spans of the chip and save the shape
+        # note you can't just use nx, ny, because the coordinate system of each
+        # chip may be different
+        xspan = 100 * np.ptp([row["c1x"], row["c2x"], row["c3x"], row["c4x"]])
+        yspan = 100 * np.ptp([row["c1y"], row["c2y"], row["c3y"], row["c4y"]])
+        self.image = galsim.Image(xspan, yspan)
+
+    def _construct_wcs(self):
+        """Construct a world coordinate system for the simulator."""
+        # create a grid of field angles to simulate photons
+        theta_min = -2  # deg
+        theta_max = 2  # deg
+        n_theta = 5
+        theta = np.deg2rad(np.linspace(theta_min, theta_max, n_theta))
+        theta_x, theta_y = np.meshgrid(theta, theta)
+        theta_x, theta_y = theta_x.flatten(), theta_y.flatten()
+
+        # propagate the photons to the detector
+        ray_vector = self.create_rayvector(
+            np.zeros(theta_x.shape),
+            np.zeros(theta_x.shape),
+            theta_x,
+            theta_y,
+            self.bandpass.effective_wavelength,
+        )
+        self.telescope.trace(ray_vector)
+        photon_array = self.rays_to_pa(ray_vector)
+
+        # fit the WCS
+        wcs = galsim.FittedSIPWCS(photon_array.x, photon_array.y, theta_x, theta_y)
+        self.wcs = wcs
+
+    def get_bounds(self, units: galsim.AngleUnit = galsim.radians):
+        """Get the bounds on field angles that hit the simulated sensor.
+
+        Parameters
+        ----------
+        units: galsim.AngleUnit, default=galsim.radians
+            The unit in which the field angles are returned.
+
+        Returns
+        -------
+        np.ndarray
+            Array of bounds: [[x_min, x_max], [y_min, ymax]].
+        """
+        # get the bounds of the image
+        bounds = self.image.bounds
+
+        # calculate the bounds on the x and y angles
+        xmin, ymin = self.wcs.xyToradec(bounds.xmin, bounds.ymin, units)
+        xmax, ymax = self.wcs.xyToradec(bounds.xmax, bounds.ymax, units)
+
+        # return bounds in an array
+        return np.array([[xmin, xmax], [ymin, ymax]])
 
     def populate_pupil(self, nphoton, rng):
         """
