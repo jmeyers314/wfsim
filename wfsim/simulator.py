@@ -49,7 +49,7 @@ class SimpleSimulator:
         rng=None,
         offset=(0.0, 0.0),
         name=None,
-        debug=False
+        debug=False,
     ):
         self.observation = observation
         airmass = 1/np.cos(observation['zenith'])
@@ -88,17 +88,15 @@ class SimpleSimulator:
         )
 
         if name is not None:
-                self.set_name(name)
+            self.set_name(name)
         else:
             self.offset = np.array(offset)
             self.image = galsim.Image(*shape)
 
-        self.sensor = galsim.Sensor()  # don't worry about BF here.
+            self.image.setCenter(0, 0)
+            self.sensor = galsim.Sensor()  # don't worry about BF here.
 
-        self.image.setCenter(0, 0)
-
-        # construct the WCS
-        self._construct_wcs()
+            self._construct_wcs() # construct the WCS
 
     def set_name(self, name: str):
         """Set the name of the sensor, according to the Rubin naming conventions.
@@ -136,6 +134,11 @@ class SimpleSimulator:
         xspan = 100 * np.ptp([row["c1x"], row["c2x"], row["c3x"], row["c4x"]])
         yspan = 100 * np.ptp([row["c1y"], row["c2y"], row["c3y"], row["c4y"]])
         self.image = galsim.Image(xspan, yspan)
+
+        self.image.setCenter(0, 0)
+        self.sensor = galsim.Sensor()
+
+        self._construct_wcs() # construct the WCS
 
     def _construct_wcs(self):
         """Construct a world coordinate system for the simulator."""
