@@ -152,6 +152,118 @@ class SSTFactory:
         out *= 1e-6
         return out
 
+    def _m1m3_genMirSurfRandErr(
+        self, zAngleInRadian, nzActuator = 156, m1m3ForceError=0.05, seedNum=0
+    ):
+        """Generate the mirror surface random error.
+
+        LUT: Loop-up table.
+
+        Parameters
+        ----------
+        zAngleInRadian : float
+            Zenith angle in radian.
+        nzActuator : integer
+            Number of Actuators in Z direction.
+        m1m3ForceError : float, optional
+            Ratio of actuator force error. (the default is 0.05.)
+        seedNum : int, optional
+            Random seed number. (the default is 0.)
+
+        Returns
+        -------
+        numpy.ndarray
+            Generated mirror surface random error in m.
+        """
+
+        # Get the actuator forces in N of M1M3 based on the look-up table (LUT)
+        zangleInDeg = np.rad2deg(zAngleInRadian)
+        LUTforce = self.getLUTforce(zangleInDeg)
+
+        # Assume the m1m3ForceError=0.05
+        # Add 5% force error to the original actuator forces
+        # This means from -5% to +5% of original actuator's force.
+        np.random.seed(int(seedNum))
+        nActuator = len(LUTforce)
+        myu = (1 + 2 * (np.random.rand(nActuator) - 0.5) * m1m3ForceError) * LUTforce
+
+        # Balance forces along z-axis
+        # This statement is intentionally to make the force balance.
+        myu[nzActuator - 1] = np.sum(LUTforce[:nzActuator]) - np.sum(myu[: nzActuator - 1])
+
+        # Balance forces along y-axis
+        # This statement is intentionally to make the force balance.
+        myu[nActuator - 1] = np.sum(LUTforce[nzActuator:]) - np.sum(myu[nzActuator:-1])
+
+        # Get the net force along the z-axis
+        zf = _fitsCache("M1M3_force_zenith.fits.gz")
+        hf = _fitsCache("M1M3_force_horizon.fits.gz")
+        u0 = zf * np.cos(zAngleInRadian) + hf * np.sin(zAngleInRadian)
+
+        # Calculate the random surface
+        G = _fitsCache("M1M3_influence_256.fits.gz")
+        randSurfInM = G.dot(myu - u0)
+
+        return randSurfInM
+
+    def getLUTforce(self, zangleInDeg):
+        """Get the actuator force of mirror based on LUT.
+
+        LUT: Look-up table.
+
+        Parameters
+        ----------
+        zangleInDeg : float
+            Zenith angle in degree.
+
+        Returns
+        -------
+        numpy.ndarray
+            Actuator forces in specific zenith angle.
+
+        Raises
+        ------
+        ValueError
+            The degee order in LUT is incorrect.
+        """
+
+        # Read the LUT file
+        lut =  _fitsCache("M1M3_LUT.fits.gz")
+
+        # Get the step. The values of LUT are listed in every step size.
+        # The degree range is 0 - 90 degree.
+        # The file in the simulation is every 1 degree. The formal one should
+        # be every 5 degree.
+        ruler = lut[0, :]
+        stepList = np.diff(ruler)
+        if np.any(stepList <= 0):
+            raise ValueError("The degee order in LUT is incorrect.")
+
+        # If the specific zenith angle is larger than the listed angle range,
+        # use the biggest listed zenith angle data instead.
+        if zangleInDeg >= ruler.max():
+            lutForce = lut[1:, -1]
+
+        # If the specific zenith angle is smaller than the listed angle range,
+        # use the smallest listed zenith angle data instead.
+        elif zangleInDeg <= ruler.min():
+            lutForce = lut[1:, 0]
+
+        # If the specific zenith angle is in the listed angle range,
+        # do the linear fit to get the data.
+        else:
+            # Find the boundary indexes for the specific zenith angle
+            p1 = np.where(ruler <= zangleInDeg)[0][-1]
+            p2 = p1 + 1
+
+            # Do the linear approximation
+            w2 = (zangleInDeg - ruler[p1]) / stepList[p1]
+            w1 = 1 - w2
+
+            lutForce = w1 * lut[1:, p1] + w2 * lut[1:, p2]
+
+        return lutForce
+
     # def _m2_gravity(self, zenith_angle):
     #     # This reproduces ts_phosim with preCompElevInRadian=0, but what is
     #     # that?  Also, I have questions regarding the input domain of the Rbf
@@ -228,6 +340,7 @@ class SSTFactory:
         doM1M3Pert=False,
         doM2Pert=False,
         doCamPert=False,
+        doLutPert=False,
         _omit_dof_grid=False,
         _omit_dof_zk=False,
     ):
@@ -249,6 +362,11 @@ class SSTFactory:
             m1m3_fea_dz = np.zeros(5256)
             if zenith_angle is not None:
                 m1m3_fea_dz = self._m1m3_gravity(zenith_angle)
+
+            if doLutPert:
+                m1m3_fea_dz += self._m1m3_genMirSurfRandErr(
+                    zenith_angle, nzActuator = 156, m1m3ForceError=0.05, seedNum=0
+                )
 
             if any([m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad]):
                 m1m3_fea_dz += self._m1m3_temperature(
