@@ -183,9 +183,9 @@ class SSTFactory:
         # Assume the m1m3ForceError=0.05
         # Add 5% force error to the original actuator forces
         # This means from -5% to +5% of original actuator's force.
-        np.random.seed(int(seedNum))
+        rng = np.random.RandomState(int(seedNum))
         nActuator = len(LUTforce)
-        myu = (1 + 2 * (np.random.rand(nActuator) - 0.5) * m1m3ForceError) * LUTforce
+        myu = (1 + 2 * (rng.rand(nActuator) - 0.5) * m1m3ForceError) * LUTforce
 
         # Balance forces along z-axis
         # This statement is intentionally to make the force balance.
@@ -194,7 +194,7 @@ class SSTFactory:
         # Balance forces along y-axis
         # This statement is intentionally to make the force balance.
         myu[nActuator - 1] = np.sum(LUTforce[nzActuator:]) - np.sum(myu[nzActuator:-1])
-
+        
         # Get the net force along the z-axis
         zf = _fitsCache("M1M3_force_zenith.fits.gz")
         hf = _fitsCache("M1M3_force_horizon.fits.gz")
@@ -264,36 +264,37 @@ class SSTFactory:
 
         return lutForce
 
-    # def _m2_gravity(self, zenith_angle):
-    #     # This reproduces ts_phosim with preCompElevInRadian=0, but what is
-    #     # that?  Also, I have questions regarding the input domain of the Rbf
-    #     # interpolation...
-    #     bx, by = self.m2_fea_coords
-    #     data = _fitsCache("M2_GT_FEA.fits.gz")
+    def _m2_gravity(self, zenith_angle):
+        # This reproduces ts_phosim with preCompElevInRadian=0, but what is
+        # that?  Also, I have questions regarding the input domain of the Rbf
+        # interpolation...
+        bx, by = self.m2_fea_coords
+        data = _fitsCache("M2_GT_FEA.fits.gz")
 
-    #     from scipy.interpolate import Rbf
-    #     zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx/1.71, by/1.71)
-    #     hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx/1.71, by/1.71)
+        from scipy.interpolate import Rbf
+        zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx/1.71, by/1.71)
+        hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx/1.71, by/1.71)
 
-    #     out = zdz * (np.cos(zenith_angle) - 1)
-    #     out += hdz * np.sin(zenith_angle)
-    #     out *= 1e-6  # micron -> meters
-    #     return out
+        out = zdz * (np.cos(zenith_angle) - 1)
+        out += hdz * np.sin(zenith_angle)
+        out *= 1e-6  # micron -> meters
+        return out
 
-    # def _m2_temperature(self, m2TzGrad, m2TrGrad):
-    #     # Same domain problem here as m2_gravity...
-    #     bx, by = self.m2_fea_coords
-    #     data = _fitsCache("M2_GT_FEA.fits.gz")
+    def _m2_temperature(self, m2TzGrad, m2TrGrad):
+        # Same domain problem here as m2_gravity...
+        bx, by = self.m2_fea_coords
+        data = _fitsCache("M2_GT_FEA.fits.gz")
 
-    #     from scipy.interpolate import Rbf
-    #     tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx/1.71, by/1.71)
-    #     trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx/1.71, by/1.71)
+        from scipy.interpolate import Rbf
+        tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx/1.71, by/1.71)
+        trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx/1.71, by/1.71)
 
-    #     out = m2TzGrad * tzdz
-    #     out += m2TrGrad * trdz
-    #     out *= 1e-6  # micron -> meters
-    #     return out
+        out = m2TzGrad * tzdz
+        out += m2TrGrad * trdz
+        out *= 1e-6  # micron -> meters
+        return out
 
+    '''
     # This is Josh's preferred interpolator, but fails b/c domain issues.
     def _m2_gravity(self, zenith_angle):
         bx, by = self.m2_fea_coords
@@ -323,7 +324,7 @@ class SSTFactory:
         out += m2TrGrad * trdz
         out *= 1e-6
         return out
-
+    '''
     def get_telescope(
         self,
         zenith_angle=None,    # radians
@@ -343,6 +344,7 @@ class SSTFactory:
         doLutPert=False,
         _omit_dof_grid=False,
         _omit_dof_zk=False,
+        seedNum = 0,
     ):
         optic = self.fiducial
 
@@ -365,7 +367,7 @@ class SSTFactory:
 
             if doLutPert:
                 m1m3_fea_dz += self._m1m3_genMirSurfRandErr(
-                    zenith_angle, nzActuator = 156, m1m3ForceError=0.05, seedNum=0
+                    zenith_angle, nzActuator = 156, m1m3ForceError=0.05, seedNum = seedNum
                 )
 
             if any([m1m3TBulk, m1m3TxGrad, m1m3TyGrad, m1m3TzGrad, m1m3TrGrad]):
@@ -461,6 +463,7 @@ class SSTFactory:
 
             if not _omit_dof_zk:
                 m2_zk += np.dot(dof[30:50], _fitsCache("M2_bend_zk.fits.gz"))
+
 
         if np.any([m2_zk]) or np.any(m2_grid):
             optic = optic.withSurface(
