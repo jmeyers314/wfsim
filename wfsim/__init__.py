@@ -4,7 +4,7 @@ from .atm import make_atmosphere
 from .utils import BBSED
 from .simulator import SimpleSimulator
 from .catalog import MockStarCatalog
-from .sst import SSTFactory
+from .sst import SSTFactory, SSTBuilder
 
 import os
 datadir = os.path.join(os.path.dirname(__file__), "data")
