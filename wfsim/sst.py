@@ -701,10 +701,10 @@ class SSTBuilder:
         self.m2_zk = None
 
         # Similar for Camera
-        self._cam_gravity_zk = None
-        self._cam_temperature_zk = None
+        self._camera_gravity_zk = None
+        self._camera_temperature_zk = None
 
-        self.cam_zk = None
+        self.camera_zk = None
 
     def __copy__(self):
         ret = self.__class__.__new__(self.__class__)
@@ -851,8 +851,8 @@ class SSTBuilder:
         ret = copy(self)
         ret.camera_zenith_angle = zenith_angle
         ret.camera_rotation_angle = rotation_angle
-        ret._cam_gravity_zk = _Invalidated
-        ret.cam_zk = _Invalidated
+        ret._camera_gravity_zk = _Invalidated
+        ret.camera_zk = _Invalidated
         return ret
 
     def with_camera_temperature(self, camera_TBulk):
@@ -870,8 +870,8 @@ class SSTBuilder:
         """
         ret = copy(self)
         ret.camera_TBulk = camera_TBulk
-        ret._cam_temperature_zk = _Invalidated
-        ret.cam_zk = _Invalidated
+        ret._camera_temperature_zk = _Invalidated
+        ret.camera_zk = _Invalidated
         return ret
 
     def with_aos_dof(self, dof):
@@ -1267,6 +1267,107 @@ class SSTBuilder:
             m2_zk += self._m2_fea_zk
         self.m2_zk = m2_zk
 
+    def _compute_camera_gravity(self):
+        if self._camera_gravity_zk is not _Invalidated:
+            return
+        if self.camera_zenith_angle is None:
+            self._camera_gravity_zk = None
+            return
+
+        rotation = self.camera_rotation_angle
+        zenith = self.camera_zenith_angle
+        self._camera_gravity_zk = {}
+        cam_data = [
+            ('L1S1', 'L1_entrance'),
+            ('L1S2', 'L1_exit'),
+            ('L2S1', 'L2_entrance'),
+            ('L2S2', 'L2_exit'),
+            ('L3S1', 'L3_entrance'),
+            ('L3S2', 'L3_exit')
+        ]
+        for tname, bname in cam_data:
+            data = _fits_cache(tname+"zer.fits.gz")
+            grav_zk = data[0, 3:] * (np.cos(zenith) - 1)
+            grav_zk += (
+                data[1, 3:] * np.cos(rotation) +
+                data[2, 3:] * np.sin(rotation)
+            ) * np.sin(zenith)
+
+            # remap Andy -> Noll Zernike indices
+            zIdxMapping = [
+                1, 3, 2, 5, 4, 6, 8, 9, 7, 10, 13, 14, 12, 15, 11, 19, 18, 20,
+                17, 21, 16, 25, 24, 26, 23, 27, 22, 28
+            ]
+            grav_zk = grav_zk[[x - 1 for x in zIdxMapping]]
+            grav_zk *= 1e-3  # mm -> m
+            # tsph -> batoid 0-index offset
+            grav_zk = np.concatenate([[0], grav_zk])
+            self._camera_gravity_zk[bname] = grav_zk
+
+    def _compute_camera_temperature(self):
+        if self._camera_temperature_zk is not _Invalidated:
+            return
+        if self.camera_TBulk is None:
+            self._camera_temperature_zk = None
+            return
+        TBulk = self.camera_TBulk
+        self._camera_temperature_zk = {}
+        cam_data = [
+            ('L1S1', 'L1_entrance'),
+            ('L1S2', 'L1_exit'),
+            ('L2S1', 'L2_entrance'),
+            ('L2S2', 'L2_exit'),
+            ('L3S1', 'L3_entrance'),
+            ('L3S2', 'L3_exit')
+        ]
+        for tname, bname in cam_data:
+            data = _fits_cache(tname+"zer.fits.gz")
+            # subtract pre-compensated grav...
+            fidx = np.interp(TBulk, data[3:, 2], np.arange(len(data[3:, 2])))+3
+            idx = int(np.floor(fidx))
+            whi = fidx - idx
+            wlo = 1 - whi
+            temp_zk = wlo * data[idx, 3:] + whi * data[idx+1, 3:]
+
+            # subtract reference temperature zk (0 deg C is idx=5)
+            temp_zk -= data[5, 3:]
+
+            # remap Andy -> Noll Zernike indices
+            zIdxMapping = [
+                1, 3, 2, 5, 4, 6, 8, 9, 7, 10, 13, 14, 12, 15, 11, 19, 18, 20,
+                17, 21, 16, 25, 24, 26, 23, 27, 22, 28
+            ]
+            temp_zk = temp_zk[[x - 1 for x in zIdxMapping]]
+            temp_zk *= 1e-3  # mm -> m
+            # tsph -> batoid 0-index offset
+            temp_zk = np.concatenate([[0], temp_zk])
+            self._camera_temperature_zk[bname] = temp_zk
+
+    def _consolidate_camera(self):
+        if self.camera_zk is not _Invalidated:
+            return
+        if (
+            self._camera_gravity_zk is None
+            and self._camera_temperature_zk is None
+        ):
+            self.camera_zk = None
+            return
+        zk = {}
+        for bname, radius in [
+            ('L1_entrance', 0.775),
+            ('L1_exit', 0.775),
+            ('L2_entrance', 0.551),
+            ('L2_exit', 0.551),
+            ('L3_entrance', 0.361),
+            ('L3_exit', 0.361),
+        ]:
+            zk[bname] = (np.zeros(29), radius)
+            if self._camera_gravity_zk is not None:
+                zk[bname][0][:] += self._camera_gravity_zk[bname]
+            if self._camera_temperature_zk is not None:
+                zk[bname][0][:] += self._camera_temperature_zk[bname]
+        self.camera_zk = zk
+
     def _apply_rigid_body_perturbations(self, optic):
         dof = self.dof
         if np.any(dof[0:3]):
@@ -1340,6 +1441,17 @@ class SSTBuilder:
         if len(components) > 1:
             optic = optic.withSurface('M2', batoid.Sum(components))
 
+        # Camera
+        if self.camera_zk is not None:
+            for k, (zk, radius) in self.camera_zk.items():
+                optic = optic.withSurface(
+                    k,
+                    batoid.Sum([
+                        optic[k].surface,
+                        batoid.Zernike(zk, R_outer=radius)
+                    ])
+                )
+
         return optic
 
     def build(self):
@@ -1360,9 +1472,9 @@ class SSTBuilder:
         self._consolidate_m2_grid()
         self._consolidate_m2_zk()
 
-        # self._compute_camera_gravity()
-        # self._compute_camera_temperature()
-        # self._consolidate_camera()
+        self._compute_camera_gravity()
+        self._compute_camera_temperature()
+        self._consolidate_camera()
 
         optic = self.fiducial
         optic = self._apply_rigid_body_perturbations(optic)
