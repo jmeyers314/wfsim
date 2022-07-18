@@ -60,6 +60,7 @@ def main(phosimDir):
     # Run the PhoSim
     tele.runPhoSim(argString)
 
+    os.makedirs(os.path.join(outputDir, "..", "opd"), exist_ok=True)
     for iopd in range(35):
         ifn = f"opd_9006050_{iopd}.fits.gz"
         ofn = ifn.replace("9006050", f"nominal_field")

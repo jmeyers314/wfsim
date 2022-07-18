@@ -6,8 +6,18 @@ import numpy as np
 import astropy.io.fits as fits
 import batoid
 import functools
-from scipy.interpolate import CloughTocher2DInterpolator
+from scipy.interpolate import CloughTocher2DInterpolator, RBFInterpolator
 from scipy.spatial import Delaunay
+
+
+class rbf:
+    def __init__(self, xy, z):
+        self._interp = RBFInterpolator(xy, z)
+    def __call__(self, x, y):
+        shape = x.shape
+        out = self._interp(np.vstack([x.ravel(), y.ravel()]).T)
+        out.shape = shape
+        return out
 
 
 @functools.lru_cache
@@ -51,11 +61,19 @@ def _node_to_grid(nodex, nodey, nodez, grid_coords):
         3rd slice is interpolated dz/dy
         4th slice is interpolated d2z/dxdy
     """
+    # Fast
     interp = CloughTocher2DInterpolator(
         np.array([nodex, nodey]).T,
         nodez,
         fill_value=0.0
     )
+
+    # # Slow
+    # interp = rbf(
+    #     np.array([nodex, nodey]).T,
+    #     nodez,
+    # )
+
     x, y = grid_coords
     nx = len(x)
     ny = len(y)
@@ -1123,17 +1141,17 @@ class SSTBuilder:
             self._m2_fea_gravity = None
             return
 
-        bx = self.m2_fea_x
-        by = self.m2_fea_y
+        bx = self.m2_fea_x / 1.71
+        by = self.m2_fea_y / 1.71
         data = _fits_cache("M2_GT_FEA.fits.gz")
 
-        # Following reproduces ts_phosim with preCompElevInRadian=0, but what is
-        # that?  Also, I have questions regarding the input domain of the Rbf
-        # interpolation...
+        # # Following reproduces ts_phosim with preCompElevInRadian=0, but what is
+        # # that?  Also, I have questions regarding the input domain of the Rbf
+        # # interpolation...
 
         # from scipy.interpolate import Rbf
-        # zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx/1.71, by/1.71)
-        # hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx/1.71, by/1.71)
+        # zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx, by)
+        # hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx, by)
 
         # out = zdz * (np.cos(self.m2_zenith_angle) - 1)
         # out += hdz * np.sin(self.m2_zenith_angle)
@@ -1142,8 +1160,8 @@ class SSTBuilder:
         # This is Josh's preferred interpolator, but fails b/c domain issues.
         # Hack to get interpolation points inside Convex Hull of input
         delaunay = Delaunay(data[:, 0:2]/0.95069)
-        zdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(bx/1.71, by/1.71)
-        hdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(bx/1.71, by/1.71)
+        zdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(bx, by)
+        hdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(bx, by)
         out = zdz * (np.cos(self.m2_zenith_angle) - 1)
         out += hdz * np.sin(self.m2_zenith_angle)
         out *= 1e-6  # micron -> meters
@@ -1161,8 +1179,8 @@ class SSTBuilder:
         by = self.m2_fea_y / 1.71
         data = _fits_cache("M2_GT_FEA.fits.gz")
 
-        # Following reproduces ts_phosim, but is slow.  Same questions about
-        # input domain as above too.
+        # # Following reproduces ts_phosim, but is slow.  Same questions about
+        # # input domain as above too.
         # from scipy.interpolate import Rbf
         # tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx, by)
         # trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx, by)
@@ -1480,8 +1498,3 @@ class SSTBuilder:
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_surface_perturbations(optic)
         return optic
-
-
-
-
-
