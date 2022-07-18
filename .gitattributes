@@ -22,3 +22,4 @@ wfsim/data/M1M3_force_horizon.fits.gz filter=lfs diff=lfs merge=lfs -text
 wfsim/data/M1M3_force_zenith.fits.gz filter=lfs diff=lfs merge=lfs -text
 wfsim/data/M1M3_LUT.fits.gz filter=lfs diff=lfs merge=lfs -text
 wfsim/data/M1M3_influence_256.fits.gz filter=lfs diff=lfs merge=lfs -text
+wfsim/data/M2_GT_grid.fits.gz filter=lfs diff=lfs merge=lfs -text

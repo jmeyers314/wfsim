@@ -1,5 +1,4 @@
 from copy import copy
-from re import I
 import galsim
 import os
 import numpy as np
@@ -243,17 +242,54 @@ class SSTFactory:
         out *= 1e-6
         return out
 
+    def _m2_gravity(self, zenith_angle):
+        # This reproduces ts_phosim with preCompElevInRadian=0, but what is
+        # that?  Also, I have questions regarding the input domain of the Rbf
+        # interpolation...
+        bx, by = self.m2_fea_coords
+
+        # data = _fits_cache("M2_GT_FEA.fits.gz")
+        # from scipy.interpolate import Rbf
+        # zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx/1.71, by/1.71)
+        # hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx/1.71, by/1.71)
+
+        # Faster to precompute the above only once
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        zdz = data[0]
+        hdz = data[1]
+
+        out = zdz * (np.cos(zenith_angle) - 1)
+        out += hdz * np.sin(zenith_angle)
+        out *= 1e-6
+        return out
+
+    def _m2_temperature(self, m2TzGrad, m2TrGrad):
+        # Same domain problem here as m2_gravity...
+        bx, by = self.m2_fea_coords
+        data = _fits_cache("M2_GT_FEA.fits.gz")
+
+        # from scipy.interpolate import Rbf
+        # tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx/1.71, by/1.71)
+        # trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx/1.71, by/1.71)
+
+        # Faster to precompute the above only once
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        tzdz = data[2]
+        trdz = data[3]
+
+        out = m2TzGrad * tzdz
+        out += m2TrGrad * trdz
+        out *= 1e-6
+        return out
+
+    # # This is Josh's preferred interpolator, but fails b/c domain issues.
     # def _m2_gravity(self, zenith_angle):
-    #     # This reproduces ts_phosim with preCompElevInRadian=0, but what is
-    #     # that?  Also, I have questions regarding the input domain of the Rbf
-    #     # interpolation...
     #     bx, by = self.m2_fea_coords
     #     data = _fits_cache("M2_GT_FEA.fits.gz")
-
-    #     from scipy.interpolate import Rbf
-    #     zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx/1.71, by/1.71)
-    #     hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx/1.71, by/1.71)
-
+    #     # Hack to get interpolation points inside Convex Hull of input
+    #     delaunay = Delaunay(data[:, 0:2]/0.95069)
+    #     zdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(bx/1.71, by/1.71)
+    #     hdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(bx/1.71, by/1.71)
     #     out = zdz * (np.cos(zenith_angle) - 1)
     #     out += hdz * np.sin(zenith_angle)
     #     out *= 1e-6  # micron -> meters
@@ -262,46 +298,19 @@ class SSTFactory:
     # def _m2_temperature(self, m2TzGrad, m2TrGrad):
     #     # Same domain problem here as m2_gravity...
     #     bx, by = self.m2_fea_coords
+    #     normX = bx / 1.71
+    #     normY = by / 1.71
     #     data = _fits_cache("M2_GT_FEA.fits.gz")
 
-    #     from scipy.interpolate import Rbf
-    #     tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx/1.71, by/1.71)
-    #     trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx/1.71, by/1.71)
+    #     # Hack to get interpolation points inside Convex Hull of input
+    #     delaunay = Delaunay(data[:, 0:2]/0.95069)
+    #     tzdz = CloughTocher2DInterpolator(delaunay, data[:, 4])(normX, normY)
+    #     trdz = CloughTocher2DInterpolator(delaunay, data[:, 5])(normX, normY)
 
     #     out = m2TzGrad * tzdz
     #     out += m2TrGrad * trdz
-    #     out *= 1e-6  # micron -> meters
+    #     out *= 1e-6
     #     return out
-
-    # This is Josh's preferred interpolator, but fails b/c domain issues.
-    def _m2_gravity(self, zenith_angle):
-        bx, by = self.m2_fea_coords
-        data = _fits_cache("M2_GT_FEA.fits.gz")
-        # Hack to get interpolation points inside Convex Hull of input
-        delaunay = Delaunay(data[:, 0:2]/0.95069)
-        zdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(bx/1.71, by/1.71)
-        hdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(bx/1.71, by/1.71)
-        out = zdz * (np.cos(zenith_angle) - 1)
-        out += hdz * np.sin(zenith_angle)
-        out *= 1e-6  # micron -> meters
-        return out
-
-    def _m2_temperature(self, m2TzGrad, m2TrGrad):
-        # Same domain problem here as m2_gravity...
-        bx, by = self.m2_fea_coords
-        normX = bx / 1.71
-        normY = by / 1.71
-        data = _fits_cache("M2_GT_FEA.fits.gz")
-
-        # Hack to get interpolation points inside Convex Hull of input
-        delaunay = Delaunay(data[:, 0:2]/0.95069)
-        tzdz = CloughTocher2DInterpolator(delaunay, data[:, 4])(normX, normY)
-        trdz = CloughTocher2DInterpolator(delaunay, data[:, 5])(normX, normY)
-
-        out = m2TzGrad * tzdz
-        out += m2TrGrad * trdz
-        out *= 1e-6
-        return out
 
     def get_telescope(
         self,
@@ -1141,27 +1150,9 @@ class SSTBuilder:
             self._m2_fea_gravity = None
             return
 
-        bx = self.m2_fea_x / 1.71
-        by = self.m2_fea_y / 1.71
-        data = _fits_cache("M2_GT_FEA.fits.gz")
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        zdz, hdz = data[0:2]
 
-        # # Following reproduces ts_phosim with preCompElevInRadian=0, but what is
-        # # that?  Also, I have questions regarding the input domain of the Rbf
-        # # interpolation...
-
-        # from scipy.interpolate import Rbf
-        # zdz = Rbf(data[:, 0], data[:, 1], data[:, 2])(bx, by)
-        # hdz = Rbf(data[:, 0], data[:, 1], data[:, 3])(bx, by)
-
-        # out = zdz * (np.cos(self.m2_zenith_angle) - 1)
-        # out += hdz * np.sin(self.m2_zenith_angle)
-        # out *= 1e-6  # micron -> meters
-
-        # This is Josh's preferred interpolator, but fails b/c domain issues.
-        # Hack to get interpolation points inside Convex Hull of input
-        delaunay = Delaunay(data[:, 0:2]/0.95069)
-        zdz = CloughTocher2DInterpolator(delaunay, data[:, 2])(bx, by)
-        hdz = CloughTocher2DInterpolator(delaunay, data[:, 3])(bx, by)
         out = zdz * (np.cos(self.m2_zenith_angle) - 1)
         out += hdz * np.sin(self.m2_zenith_angle)
         out *= 1e-6  # micron -> meters
@@ -1175,25 +1166,8 @@ class SSTBuilder:
             self._m2_fea_temperature = None
             return
 
-        bx = self.m2_fea_x / 1.71
-        by = self.m2_fea_y / 1.71
-        data = _fits_cache("M2_GT_FEA.fits.gz")
-
-        # # Following reproduces ts_phosim, but is slow.  Same questions about
-        # # input domain as above too.
-        # from scipy.interpolate import Rbf
-        # tzdz = Rbf(data[:, 0], data[:, 1], data[:, 4])(bx, by)
-        # trdz = Rbf(data[:, 0], data[:, 1], data[:, 5])(bx, by)
-
-        # out = self.m2_TzGrad * tzdz
-        # out += self.m2_TrGrad * trdz
-        # out *= 1e-6  # micron -> meters
-
-        # This is Josh's preferred interpolator, fails b/c domain issues.
-        # Hack to get interpolation points inside Convex Hull of input
-        delaunay = Delaunay(data[:, 0:2]/0.95069)
-        tzdz = CloughTocher2DInterpolator(delaunay, data[:, 4])(bx, by)
-        trdz = CloughTocher2DInterpolator(delaunay, data[:, 5])(bx, by)
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        tzdz, trdz = data[2:4]
 
         out = self.m2_TzGrad * tzdz
         out += self.m2_TrGrad * trdz
