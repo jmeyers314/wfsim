@@ -1073,9 +1073,13 @@ class SSTBuilder:
             rng = np.random.default_rng(self.m1m3_lut_seed)
             LUT_force *= rng.uniform(1-error, 1+error, size=len(LUT_force))
 
-            # Balance forces by manipulating these 2 actuators
-            LUT_force[155] = z_force - np.sum(LUT_force[:155])
-            LUT_force[-1] = y_force - np.sum(LUT_force[156:-1])
+            # Balance forces by adjusting means in 2 ranges
+            LUT_force[:156] -= np.mean(LUT_force[:156]) - z_force
+            LUT_force[156:] -= np.mean(LUT_force[156:]) - y_force
+
+            # # Balance forces by manipulating these 2 actuators
+            # LUT_force[155] = z_force - np.sum(LUT_force[:155])
+            # LUT_force[-1] = y_force - np.sum(LUT_force[156:-1])
 
         zf = _fits_cache("M1M3_force_zenith.fits.gz")
         hf = _fits_cache("M1M3_force_horizon.fits.gz")
