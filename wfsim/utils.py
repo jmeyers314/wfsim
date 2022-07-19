@@ -5,7 +5,7 @@ import galsim
 def BBSED(T):
     """(unnormalized) Blackbody SED for temperature T in Kelvin.
     """
-    waves_nm = np.arange(330.0, 1120.0, 10.0)
+    waves_nm = np.arange(305.0, 1120.0, 10.0)
     def planck(t, w):
         # t in K
         # w in m
