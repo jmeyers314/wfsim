@@ -683,6 +683,7 @@ class SSTBuilder:
         self.m1m3_TyGrad = 0.0
         self.m1m3_TzGrad = 0.0
         self.m1m3_TrGrad = 0.0
+        self.m1m3_lut_zenith_angle = None
 
         self.m2_zenith_angle = None
         self.m2_TzGrad = None
@@ -704,6 +705,9 @@ class SSTBuilder:
         self._m1_bend_grid = None
         self._m3_bend_grid = None
         self._m1m3_bend_zk = None
+        self._m1m3_fea_lut = None
+        self.m1m3_lut_error = None
+        self.m1m3_lut_seed = None
 
         # FEA intermediate dependencies
         self._m1_fea_grid = None
@@ -805,6 +809,36 @@ class SSTBuilder:
         ret.m1_grid = _Invalidated
         ret.m3_grid = _Invalidated
         ret.m1m3_zk = _Invalidated
+        return ret
+
+    def with_m1m3_lut(self, zenith_angle, error=0.0, seed=1):
+        """Return new SSTBuilder that includes LUT perturbations of M1M3.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+        error : float, optional
+            Fractional error to apply to LUT forces.
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with M1M3 LUT applied.
+        """
+        ret = copy(self)
+        ret.m1m3_lut_zenith_angle = zenith_angle
+        ret.m1m3_lut_error=error
+        ret.m1m3_lut_seed=seed
+
+        ret._m1m3_fea_lut = _Invalidated
+        ret._m1_fea_grid = _Invalidated
+        ret._m3_fea_grid = _Invalidated
+        ret._m1m3_fea_zk = _Invalidated
+        ret.m1_grid = _Invalidated
+        ret.m3_grid = _Invalidated
+        ret.m1m3_zk = _Invalidated
+
         return ret
 
     def with_m2_gravity(self, zenith_angle):
@@ -1020,9 +1054,39 @@ class SSTBuilder:
         out *= 1e-6
         self._m1m3_fea_temperature = out
 
+    def _compute_m1m3_lut(self):
+        if self._m1m3_fea_lut is not _Invalidated:
+            return
+        from scipy.interpolate import interp1d
+        data = _fits_cache("M1M3_LUT.fits.gz")
+
+        LUT_force = interp1d(data[0], data[1:])(
+            np.rad2deg(self.m1m3_lut_zenith_angle)
+        )
+
+        error = self.m1m3_lut_error
+        if error != 0.0:
+            # Get current forces so we can rebalance after applying random error
+            z_force = np.sum(LUT_force[:156])
+            y_force = np.sum(LUT_force[156:])
+
+            rng = np.random.default_rng(self.m1m3_lut_seed)
+            LUT_force *= rng.uniform(1-error, 1+error, size=len(LUT_force))
+
+            # Balance forces by manipulating these 2 actuators
+            LUT_force[155] = z_force - np.sum(LUT_force[:155])
+            LUT_force[-1] = y_force - np.sum(LUT_force[156:-1])
+
+        zf = _fits_cache("M1M3_force_zenith.fits.gz")
+        hf = _fits_cache("M1M3_force_horizon.fits.gz")
+        u0 = zf * np.cos(self.m1m3_lut_zenith_angle)
+        u0 += hf * np.sin(self.m1m3_lut_zenith_angle)
+        G = _fits_cache("M1M3_influence_256.fits.gz")
+        self._m1m3_fea_lut = G.dot(LUT_force - u0)
+
     def _consolidate_m1m3_fea(self):
         # Take
-        #     _m1m3_fea_gravity,  _m1m3_fea_temperature
+        #     _m1m3_fea_gravity,  _m1m3_fea_temperature, _m1m3_fea_lut
         # and set
         #     _m1_fea_grid, _m3_fea_grid, _m1m3_fea_zk
         if self._m1_fea_grid is not _Invalidated:
@@ -1030,6 +1094,7 @@ class SSTBuilder:
         if (
             self._m1m3_fea_gravity is None
             and self._m1m3_fea_temperature is None
+            and self._m1m3_fea_lut is None
         ):
             self._m1_fea_grid = None
             self._m3_fea_grid = None
@@ -1040,6 +1105,8 @@ class SSTBuilder:
             m1m3_fea = self._m1m3_fea_gravity
         if self._m1m3_fea_temperature is not None:
             m1m3_fea += self._m1m3_fea_temperature
+        if self._m1m3_fea_lut is not None:
+            m1m3_fea += self._m1m3_fea_lut
 
         if np.any(m1m3_fea):
             bx = self.m1m3_fea_x
@@ -1451,6 +1518,7 @@ class SSTBuilder:
         # We're manually traversing the DAG effectively
         self._compute_m1m3_gravity()
         self._compute_m1m3_temperature()
+        self._compute_m1m3_lut()
         self._consolidate_m1m3_fea()
         self._compute_m1m3_bend()
         self._consolidate_m1_grid()

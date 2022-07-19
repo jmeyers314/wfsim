@@ -73,6 +73,7 @@ with tqdm(total=4*4*35) as pbar:
                         m1m3_TzGrad=-0.0316,
                         m1m3_TrGrad=0.0187
                     )
+                    .with_m1m3_lut(np.deg2rad(zenith_angle))
                 )
             if m2:
                 builder = (

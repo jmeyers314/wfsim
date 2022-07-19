@@ -53,7 +53,10 @@ def main(phosimDir):
             )
 
             pertCmdFilePath = tele.writePertBaseOnConfigFile(
-                outputDir, saveResMapFig=True
+                outputDir,
+                saveResMapFig=True,
+                m1m3ForceError=0.0,  # Don't want random errors here
+                seedNum=1  # Only trigger LUT if this is non-None
             )
             # Write the physical command file
             cmdFilePath = tele.writeCmdFile(
