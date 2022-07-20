@@ -1030,7 +1030,7 @@ class SSTBuilder:
             self.m1m3_TzGrad,
             self.m1m3_TrGrad,
         ]):
-            self._m1m3_fea_gravity = None
+            self._m1m3_fea_temperature = None
             return
 
         bx = self.m1m3_fea_x
@@ -1386,6 +1386,11 @@ class SSTBuilder:
         for tname, bname in cam_data:
             data = _fits_cache(tname+"zer.fits.gz")
             # subtract pre-compensated grav...
+            TBulk = np.clip(
+                TBulk,
+                np.min(data[3:, 2])+0.001,
+                np.max(data[3:, 2])-0.001
+            )
             fidx = np.interp(TBulk, data[3:, 2], np.arange(len(data[3:, 2])))+3
             idx = int(np.floor(fidx))
             whi = fidx - idx
