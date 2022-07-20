@@ -40,6 +40,8 @@ class WFApp:
         self.thy = 0.0
         self.zenith = 0.0
         self.rotation = 0.0
+        self.nphot = int(2e5)
+        self.fwhm = 0.7
 
         self.do_M1M3_gravity = False
         self.do_M1M3_temperature = False
@@ -73,11 +75,15 @@ class WFApp:
         self.thy_control = ipywidgets.FloatText(value=0.0, step=0.25, description='Field y (deg)', **kwargs)
         self.zenith_control = ipywidgets.BoundedFloatText(value=0.0, step=1.0, min=0.0, max=90.0, description="Zenith (deg)", **kwargs)
         self.rotation_control = ipywidgets.BoundedFloatText(value=0.0, step=1.0, min=-90.0, max=90.0, description="Rotation (deg)", **kwargs)
+        self.nphot_control = ipywidgets.IntText(value=int(2e5), description='# phot')
+        self.fwhm_control = ipywidgets.FloatText(value=0.7, description='seeing (arcsec)')
         self.point_control = ipywidgets.VBox([
             self.thx_control,
             self.thy_control,
             self.zenith_control,
-            self.rotation_control
+            self.rotation_control,
+            self.nphot_control,
+            self.fwhm_control
         ])
 
         self.M1M3_gravity_checkbox = ipywidgets.Checkbox(value=False, description="Gravity")
@@ -152,6 +158,8 @@ class WFApp:
         self.thy_control.observe(self.handle_thy, 'value')
         self.zenith_control.observe(self.handle_zenith, 'value')
         self.rotation_control.observe(self.handle_rotation, 'value')
+        self.nphot_control.observe(self.handle_nphot, 'value')
+        self.fwhm_control.observe(self.handle_fwhm, 'value')
 
         self.M1M3_gravity_checkbox.observe(self.handle_M1M3_grav_check, 'value')
         self.M1M3_temperature_checkbox.observe(self.handle_M1M3_temp_check, 'value')
@@ -193,6 +201,14 @@ class WFApp:
 
     def handle_rotation(self, change):
         self.rotation = change['new']
+        self.update()
+
+    def handle_nphot(self, change):
+        self.nphot = change['new']
+        self.update()
+
+    def handle_fwhm(self, change):
+        self.fwhm = change['new']
         self.update()
 
     def handle_M1M3_grav_check(self, change):
@@ -396,7 +412,7 @@ class WFApp:
         extra = tel1.withGloballyShiftedOptic("Detector", (0, 0, +0.0015))
         rv = batoid.RayVector.asPolar(
             optic=tel1, wavelength=self.wavelength,
-            nrandom=int(2e5),
+            nrandom=self.nphot,
             theta_x=np.deg2rad(self.thx),
             theta_y=np.deg2rad(self.thy)
         )
@@ -408,19 +424,20 @@ class WFApp:
         rve.x[:] -= np.mean(rve.x[~rve.vignetted])
         rve.y[:] -= np.mean(rve.y[~rve.vignetted])
 
-        # Convolve in a Gaussian FWHM ~0.5
-        rvi.x[:] += np.random.normal(scale=10e-6, size=len(rvi))
-        rvi.y[:] += np.random.normal(scale=10e-6, size=len(rvi))
-        rve.x[:] += np.random.normal(scale=10e-6, size=len(rve))
-        rve.y[:] += np.random.normal(scale=10e-6, size=len(rve))
+        # Convolve in a Gaussian
+        scale = 10e-6 * self.fwhm/2.35/0.2
+        rvi.x[:] += np.random.normal(scale=scale, size=len(rvi))
+        rvi.y[:] += np.random.normal(scale=scale, size=len(rvi))
+        rve.x[:] += np.random.normal(scale=scale, size=len(rve))
+        rve.y[:] += np.random.normal(scale=scale, size=len(rve))
 
         # Bin rays
         di, _, _ = np.histogram2d(
-            rvi.x[~rvi.vignetted], rvi.y[~rvi.vignetted], bins=255,
+            rvi.y[~rvi.vignetted], rvi.x[~rvi.vignetted], bins=255,
             range=[[-127*10e-6, 127*10e-6], [-127*10e-6, 127*10e-6]]
         )
         de, _, _ = np.histogram2d(
-            rve.x[~rve.vignetted], rve.y[~rve.vignetted], bins=255,
+            rve.y[~rve.vignetted], rve.x[~rve.vignetted], bins=255,
             range=[[-127*10e-6, 127*10e-6], [-127*10e-6, 127*10e-6]]
         )
 
