@@ -662,7 +662,7 @@ class SSTBuilder:
         return self._m2_grid_y
 
     def __init__(self, fiducial):
-        """Create a Simony Survey Telescope factory.
+        """Create a Simony Survey Telescope builder.
 
         Parameters
         ----------
@@ -671,6 +671,12 @@ class SSTBuilder:
             (AOS) perturbations are applied.
         """
         self.fiducial = fiducial
+        if 'LSST.LSSTCamera' in self.fiducial.itemDict:
+            self.cam_name = 'LSSTCamera'
+        elif 'ComCam.ComCam' in self.fiducial.itemDict:
+            self.cam_name = 'ComCam'
+        else:
+            raise ValueError("Unsupported optic")
 
         # "Input" variables.
 
@@ -1454,7 +1460,7 @@ class SSTBuilder:
 
         if np.any(dof[5:8] != 0):
             optic = optic.withGloballyShiftedOptic(
-                "LSSTCamera",
+                self.cam_name,
                 np.array([dof[6], dof[7], -dof[5]])*1e-6
             )
 
@@ -1462,7 +1468,7 @@ class SSTBuilder:
             rx = batoid.RotX(np.deg2rad(-dof[8]/3600))
             ry = batoid.RotY(np.deg2rad(-dof[9]/3600))
             optic = optic.withLocallyRotatedOptic(
-                "LSSTCamera",
+                self.cam_name,
                 rx @ ry
             )
 
