@@ -611,6 +611,94 @@ class SSTBuilder:
             self._load_m2()
         return self._m2_grid_xy
 
+    @property
+    def m1m3_zenith_angle(self):
+        return self._m1m3_zenith_angle
+
+    @property
+    def m1m3_TBulk(self):
+        return self._m1m3_TBulk
+
+    @property
+    def m1m3_TxGrad(self):
+        return self._m1m3_TxGrad
+
+    @property
+    def m1m3_TyGrad(self):
+        return self._m1m3_TyGrad
+
+    @property
+    def m1m3_TzGrad(self):
+        return self._m1m3_TzGrad
+
+    @property
+    def m1m3_TrGrad(self):
+        return self._m1m3_TrGrad
+
+    @property
+    def m1m3_lut_zenith_angle(self):
+        return self._m1m3_lut_zenith_angle
+
+    @property
+    def m1m3_lut_error(self):
+        return self._m1m3_lut_error
+
+    @property
+    def m1m3_lut_seed(self):
+        return self._m1m3_lut_seed
+
+    @property
+    def m2_zenith_angle(self):
+        return self._m2_zenith_angle
+
+    @property
+    def m2_TzGrad(self):
+        return self._m2_TzGrad
+
+    @property
+    def m2_TrGrad(self):
+        return self._m2_TrGrad
+
+    @property
+    def camera_zenith_angle(self):
+        return self._camera_zenith_angle
+
+    @property
+    def camera_rotation_angle(self):
+        return self._camera_rotation_angle
+
+    @property
+    def camera_TBulk(self):
+        return self._camera_TBulk
+
+    @property
+    def dof(self):
+        return self._dof
+
+    @property
+    def m1_grid(self):
+        return self._m1_grid
+
+    @property
+    def m3_grid(self):
+        return self._m3_grid
+
+    @property
+    def m1m3_zk(self):
+        return self._m1m3_zk
+
+    @property
+    def m2_grid(self):
+        return self._m2_grid
+
+    @property
+    def m2_zk(self):
+        return self._m2_zk
+
+    @property
+    def camera_zk(self):
+        return self._camera_zk
+
     def __init__(self, fiducial):
         """Create a Simony Survey Telescope builder.
 
@@ -628,28 +716,28 @@ class SSTBuilder:
         else:
             raise ValueError("Unsupported optic")
 
-        # "Input" variables.
+        # "Input" variables.  Use public properties to make sure these are
+        # read-only.
 
-        # Awkward, but it's possible to set different zenith angles for
-        # different subsystems.  Useful for testing one subsystem at a time
-        # though.
-        self.m1m3_zenith_angle = None
-        self.m1m3_TBulk = 0.0
-        self.m1m3_TxGrad = 0.0
-        self.m1m3_TyGrad = 0.0
-        self.m1m3_TzGrad = 0.0
-        self.m1m3_TrGrad = 0.0
-        self.m1m3_lut_zenith_angle = None
+        self._m1m3_zenith_angle = None
+        self._m1m3_TBulk = 0.0
+        self._m1m3_TxGrad = 0.0
+        self._m1m3_TyGrad = 0.0
+        self._m1m3_TzGrad = 0.0
+        self._m1m3_TrGrad = 0.0
+        self._m1m3_lut_zenith_angle = None
+        self._m1m3_lut_error = None
+        self._m1m3_lut_seed = None
 
-        self.m2_zenith_angle = None
-        self.m2_TzGrad = None
-        self.m2_TrGrad = None
+        self._m2_zenith_angle = None
+        self._m2_TzGrad = None
+        self._m2_TrGrad = None
 
-        self.camera_zenith_angle = None
-        self.camera_rotation_angle = None
-        self.camera_TBulk = None
+        self._camera_zenith_angle = None
+        self._camera_rotation_angle = None
+        self._camera_TBulk = None
 
-        self.dof = np.zeros(50)
+        self._dof = np.zeros(50)
 
         # Intermediate results caches.  Be careful to invalidate (by setting to
         # None) as required by any of the dependent inputs being changed.
@@ -662,8 +750,6 @@ class SSTBuilder:
         self._m3_bend_grid = None
         self._m1m3_bend_zk = None
         self._m1m3_fea_lut = None
-        self.m1m3_lut_error = None
-        self.m1m3_lut_seed = None
 
         # FEA intermediate dependencies
         self._m1_fea_grid = None
@@ -671,9 +757,9 @@ class SSTBuilder:
         self._m1m3_fea_zk = None
 
         # Final results we're trying to populate
-        self.m1_grid = None
-        self.m3_grid = None
-        self.m1m3_zk = None
+        self._m1_grid = None
+        self._m3_grid = None
+        self._m1m3_zk = None
 
         # Similar for M2
         self._m2_fea_gravity = None
@@ -684,14 +770,14 @@ class SSTBuilder:
         self._m2_fea_grid = None
         self._m2_fea_zk = None
 
-        self.m2_grid = None
-        self.m2_zk = None
+        self._m2_grid = None
+        self._m2_zk = None
 
         # Similar for Camera
         self._camera_gravity_zk = None
         self._camera_temperature_zk = None
 
-        self.camera_zk = None
+        self._camera_zk = None
 
     def __copy__(self):
         ret = self.__class__.__new__(self.__class__)
@@ -712,15 +798,15 @@ class SSTBuilder:
             New builder with M1M3 gravitation flexure applied.
         """
         ret = copy(self)
-        ret.m1m3_zenith_angle = zenith_angle
+        ret._m1m3_zenith_angle = zenith_angle
         # Invalidate dependents
         ret._m1m3_fea_gravity = _Invalidated
         ret._m1_fea_grid = _Invalidated
         ret._m3_fea_grid = _Invalidated
         ret._m1m3_fea_zk = _Invalidated
-        ret.m1_grid = _Invalidated
-        ret.m3_grid = _Invalidated
-        ret.m1m3_zk = _Invalidated
+        ret._m1_grid = _Invalidated
+        ret._m3_grid = _Invalidated
+        ret._m1m3_zk = _Invalidated
         return ret
 
     def with_m1m3_temperature(
@@ -752,19 +838,19 @@ class SSTBuilder:
             New builder with M1M3 temperature flexure applied.
         """
         ret = copy(self)
-        ret.m1m3_TBulk = m1m3_TBulk
-        ret.m1m3_TxGrad = m1m3_TxGrad
-        ret.m1m3_TyGrad = m1m3_TyGrad
-        ret.m1m3_TzGrad = m1m3_TzGrad
-        ret.m1m3_TrGrad = m1m3_TrGrad
+        ret._m1m3_TBulk = m1m3_TBulk
+        ret._m1m3_TxGrad = m1m3_TxGrad
+        ret._m1m3_TyGrad = m1m3_TyGrad
+        ret._m1m3_TzGrad = m1m3_TzGrad
+        ret._m1m3_TrGrad = m1m3_TrGrad
         # Invalidate dependents
         ret._m1m3_fea_temperature = _Invalidated
         ret._m1_fea_grid = _Invalidated
         ret._m3_fea_grid = _Invalidated
         ret._m1m3_fea_zk = _Invalidated
-        ret.m1_grid = _Invalidated
-        ret.m3_grid = _Invalidated
-        ret.m1m3_zk = _Invalidated
+        ret._m1_grid = _Invalidated
+        ret._m3_grid = _Invalidated
+        ret._m1m3_zk = _Invalidated
         return ret
 
     def with_m1m3_lut(self, zenith_angle, error=0.0, seed=1):
@@ -783,17 +869,17 @@ class SSTBuilder:
             New builder with M1M3 LUT applied.
         """
         ret = copy(self)
-        ret.m1m3_lut_zenith_angle = zenith_angle
-        ret.m1m3_lut_error=error
-        ret.m1m3_lut_seed=seed
+        ret._m1m3_lut_zenith_angle = zenith_angle
+        ret._m1m3_lut_error=error
+        ret._m1m3_lut_seed=seed
 
         ret._m1m3_fea_lut = _Invalidated
         ret._m1_fea_grid = _Invalidated
         ret._m3_fea_grid = _Invalidated
         ret._m1m3_fea_zk = _Invalidated
-        ret.m1_grid = _Invalidated
-        ret.m3_grid = _Invalidated
-        ret.m1m3_zk = _Invalidated
+        ret._m1_grid = _Invalidated
+        ret._m3_grid = _Invalidated
+        ret._m1m3_zk = _Invalidated
 
         return ret
 
@@ -811,13 +897,13 @@ class SSTBuilder:
             New builder with M2 gravitation flexure applied.
         """
         ret = copy(self)
-        ret.m2_zenith_angle = zenith_angle
+        ret._m2_zenith_angle = zenith_angle
         # Invalidate dependents
         ret._m2_fea_gravity = _Invalidated
         ret._m2_fea_grid = _Invalidated
         ret._m2_fea_zk = _Invalidated
-        ret.m2_grid = _Invalidated
-        ret.m2_zk = _Invalidated
+        ret._m2_grid = _Invalidated
+        ret._m2_zk = _Invalidated
         return ret
 
     def with_m2_temperature(
@@ -840,14 +926,14 @@ class SSTBuilder:
             New builder with M2 temperature flexure applied.
         """
         ret = copy(self)
-        ret.m2_TzGrad = m2_TzGrad
-        ret.m2_TrGrad = m2_TrGrad
+        ret._m2_TzGrad = m2_TzGrad
+        ret._m2_TrGrad = m2_TrGrad
         # Invalidate dependents
         ret._m2_fea_temperature = _Invalidated
         ret._m2_fea_grid = _Invalidated
         ret._m2_fea_zk = _Invalidated
-        ret.m2_grid = _Invalidated
-        ret.m2_zk = _Invalidated
+        ret._m2_grid = _Invalidated
+        ret._m2_zk = _Invalidated
         return ret
 
     def with_camera_gravity(self, zenith_angle, rotation_angle):
@@ -866,10 +952,10 @@ class SSTBuilder:
             New builder with camera gravitation flexure applied.
         """
         ret = copy(self)
-        ret.camera_zenith_angle = zenith_angle
-        ret.camera_rotation_angle = rotation_angle
+        ret._camera_zenith_angle = zenith_angle
+        ret._camera_rotation_angle = rotation_angle
         ret._camera_gravity_zk = _Invalidated
-        ret.camera_zk = _Invalidated
+        ret._camera_zk = _Invalidated
         return ret
 
     def with_camera_temperature(self, camera_TBulk):
@@ -886,9 +972,9 @@ class SSTBuilder:
             New builder with camera temperature flexure applied.
         """
         ret = copy(self)
-        ret.camera_TBulk = camera_TBulk
+        ret._camera_TBulk = camera_TBulk
         ret._camera_temperature_zk = _Invalidated
-        ret.camera_zk = _Invalidated
+        ret._camera_zk = _Invalidated
         return ret
 
     def with_aos_dof(self, dof):
@@ -911,34 +997,34 @@ class SSTBuilder:
             New builder with specified AOS DOF.
         """
         ret = copy(self)
-        ret.dof = dof
+        ret._dof = dof
         # Invalidate dependents
         if np.any(dof[10:30]):
             ret._m1_bend_grid = _Invalidated
             ret._m3_bend_grid = _Invalidated
             ret._m1m3_bend_zk = _Invalidated
-            ret.m1_grid = _Invalidated
-            ret.m3_grid = _Invalidated
-            ret.m1m3_zk = _Invalidated
+            ret._m1_grid = _Invalidated
+            ret._m3_grid = _Invalidated
+            ret._m1m3_zk = _Invalidated
         if np.any(dof[30:50]):
             ret._m2_bend_grid = _Invalidated
             ret._m2_bend_zk = _Invalidated
-            ret.m2_grid = _Invalidated
-            ret.m2_zk = _Invalidated
+            ret._m2_grid = _Invalidated
+            ret._m2_zk = _Invalidated
         return ret
 
     def _compute_m1m3_gravity(self):
         if self._m1m3_fea_gravity is not _Invalidated:
             return
-        if self.m1m3_zenith_angle is None:
+        if self._m1m3_zenith_angle is None:
             self._m1m3_fea_gravity = None
             return
 
         zdata = _fits_cache("M1M3_dxdydz_zenith.fits.gz")
         hdata = _fits_cache("M1M3_dxdydz_horizon.fits.gz")
         dxyz = (
-            zdata * np.cos(self.m1m3_zenith_angle) +
-            hdata * np.sin(self.m1m3_zenith_angle)
+            zdata * np.cos(self._m1m3_zenith_angle) +
+            hdata * np.sin(self._m1m3_zenith_angle)
         )
         dz = dxyz[:,2]
 
@@ -978,11 +1064,11 @@ class SSTBuilder:
         if self._m1m3_fea_temperature is not _Invalidated:
             return
         if not np.any([
-            self.m1m3_TBulk,
-            self.m1m3_TxGrad,
-            self.m1m3_TyGrad,
-            self.m1m3_TzGrad,
-            self.m1m3_TrGrad,
+            self._m1m3_TBulk,
+            self._m1m3_TxGrad,
+            self._m1m3_TyGrad,
+            self._m1m3_TzGrad,
+            self._m1m3_TrGrad,
         ]):
             self._m1m3_fea_temperature = None
             return
@@ -999,11 +1085,11 @@ class SSTBuilder:
         tzdz = CloughTocher2DInterpolator(delaunay, data[:, 5])(normX, normY)
         trdz = CloughTocher2DInterpolator(delaunay, data[:, 6])(normX, normY)
 
-        out = self.m1m3_TBulk * tbdz
-        out += self.m1m3_TxGrad * txdz
-        out += self.m1m3_TyGrad * tydz
-        out += self.m1m3_TzGrad * tzdz
-        out += self.m1m3_TrGrad * trdz
+        out = self._m1m3_TBulk * tbdz
+        out += self._m1m3_TxGrad * txdz
+        out += self._m1m3_TyGrad * tydz
+        out += self._m1m3_TzGrad * tzdz
+        out += self._m1m3_TrGrad * trdz
         out *= 1e-6
         self._m1m3_fea_temperature = out
 
@@ -1014,16 +1100,16 @@ class SSTBuilder:
         data = _fits_cache("M1M3_LUT.fits.gz")
 
         LUT_force = interp1d(data[0], data[1:])(
-            np.rad2deg(self.m1m3_lut_zenith_angle)
+            np.rad2deg(self._m1m3_lut_zenith_angle)
         )
 
-        error = self.m1m3_lut_error
+        error = self._m1m3_lut_error
         if error != 0.0:
             # Get current forces so we can rebalance after applying random error
             z_force = np.sum(LUT_force[:156])
             y_force = np.sum(LUT_force[156:])
 
-            rng = np.random.default_rng(self.m1m3_lut_seed)
+            rng = np.random.default_rng(self._m1m3_lut_seed)
             LUT_force *= rng.uniform(1-error, 1+error, size=len(LUT_force))
 
             # Balance forces by adjusting means in 2 ranges
@@ -1036,8 +1122,8 @@ class SSTBuilder:
 
         zf = _fits_cache("M1M3_force_zenith.fits.gz")
         hf = _fits_cache("M1M3_force_horizon.fits.gz")
-        u0 = zf * np.cos(self.m1m3_lut_zenith_angle)
-        u0 += hf * np.sin(self.m1m3_lut_zenith_angle)
+        u0 = zf * np.cos(self._m1m3_lut_zenith_angle)
+        u0 += hf * np.sin(self._m1m3_lut_zenith_angle)
         G = _fits_cache("M1M3_influence_256.fits.gz")
         self._m1m3_fea_lut = G.dot(LUT_force - u0)
 
@@ -1111,13 +1197,13 @@ class SSTBuilder:
 
     def _consolidate_m1_grid(self):
         # Take m1_fea_grid, m1_bend_grid and make m1_grid.
-        if self.m1_grid is not _Invalidated:
+        if self._m1_grid is not _Invalidated:
             return
         if (
             self._m1_bend_grid is None
             and self._m1_fea_grid is None
         ):
-            self.m1_grid = None
+            self._m1_grid = None
             return
 
         if self._m1_bend_grid is not None:
@@ -1126,17 +1212,17 @@ class SSTBuilder:
             m1_grid = np.zeros((4, 204, 204))
         if self._m1_fea_grid is not None:
             m1_grid += self._m1_fea_grid
-        self.m1_grid = m1_grid
+        self._m1_grid = m1_grid
 
     def _consolidate_m3_grid(self):
         # Take m3_fea_grid, m3_bend_grid and make m3_grid.
-        if self.m3_grid is not _Invalidated:
+        if self._m3_grid is not _Invalidated:
             return
         if (
             self._m3_bend_grid is None
             and self._m3_fea_grid is None
         ):
-            self.m3_grid = None
+            self._m3_grid = None
             return
 
         if self._m3_bend_grid is not None:
@@ -1145,36 +1231,36 @@ class SSTBuilder:
             m3_grid = np.zeros((4, 204, 204))
         if self._m3_fea_grid is not None:
             m3_grid += self._m3_fea_grid
-        self.m3_grid = m3_grid
+        self._m3_grid = m3_grid
 
     def _consolidate_m1m3_zk(self):
-        if self.m1m3_zk is not _Invalidated:
+        if self._m1m3_zk is not _Invalidated:
             return
         if (
             self._m1m3_bend_zk is None
             and self._m1m3_fea_zk is None
         ):
-            self.m1m3_zk = None
+            self._m1m3_zk = None
             return
         m1m3_zk = np.zeros(29)
         if self._m1m3_bend_zk is not None:
             m1m3_zk += self._m1m3_bend_zk
         if self._m1m3_fea_zk is not None:
             m1m3_zk += self._m1m3_fea_zk
-        self.m1m3_zk = m1m3_zk
+        self._m1m3_zk = m1m3_zk
 
     def _compute_m2_gravity(self):
         if self._m2_fea_gravity is not _Invalidated:
             return
-        if self.m2_zenith_angle is None:
+        if self._m2_zenith_angle is None:
             self._m2_fea_gravity = None
             return
 
         data = _fits_cache("M2_GT_grid.fits.gz")
         zdz, hdz = data[0:2]
 
-        out = zdz * (np.cos(self.m2_zenith_angle) - 1)
-        out += hdz * np.sin(self.m2_zenith_angle)
+        out = zdz * (np.cos(self._m2_zenith_angle) - 1)
+        out += hdz * np.sin(self._m2_zenith_angle)
         out *= 1e-6  # micron -> meters
 
         self._m2_fea_gravity = out
@@ -1182,15 +1268,15 @@ class SSTBuilder:
     def _compute_m2_temperature(self):
         if self._m2_fea_temperature is not _Invalidated:
             return
-        if not np.any([self.m2_TrGrad, self.m2_TzGrad]):
+        if not np.any([self._m2_TrGrad, self._m2_TzGrad]):
             self._m2_fea_temperature = None
             return
 
         data = _fits_cache("M2_GT_grid.fits.gz")
         tzdz, trdz = data[2:4]
 
-        out = self.m2_TzGrad * tzdz
-        out += self.m2_TrGrad * trdz
+        out = self._m2_TzGrad * tzdz
+        out += self._m2_TrGrad * trdz
         out *= 1e-6
 
         self._m2_fea_temperature = out
@@ -1233,7 +1319,7 @@ class SSTBuilder:
     def _compute_m2_bend(self):
         if self._m2_bend_zk is not _Invalidated:
             return
-        dof = self.dof[30:50]
+        dof = self._dof[30:50]
         if np.any(dof):
             m2_bend = _fits_cache("M2_bend_grid.fits.gz")
             self._m2_bend_grid = np.tensordot(m2_bend, dof, axes=[[1], [0]])
@@ -1244,13 +1330,13 @@ class SSTBuilder:
 
     def _consolidate_m2_grid(self):
         # Take m2_fea_grid, m2_bend_grid and make m2_grid.
-        if self.m2_grid is not _Invalidated:
+        if self._m2_grid is not _Invalidated:
             return
         if (
             self._m2_bend_grid is None
             and self._m2_fea_grid is None
         ):
-            self.m2_grid = None
+            self._m2_grid = None
             return
 
         if self._m2_bend_grid is not None:
@@ -1259,7 +1345,7 @@ class SSTBuilder:
             m2_grid = np.zeros((4, 204, 204))
         if self._m2_fea_grid is not None:
             m2_grid += self._m2_fea_grid
-        self.m2_grid = m2_grid
+        self._m2_grid = m2_grid
 
     def _consolidate_m2_zk(self):
         if self.m2_zk is not _Invalidated:
@@ -1268,24 +1354,24 @@ class SSTBuilder:
             self._m2_bend_zk is None
             and self._m2_fea_zk is None
         ):
-            self.m2_zk = None
+            self._m2_zk = None
             return
         m2_zk = np.zeros(29)
         if self._m2_bend_zk is not None:
             m2_zk += self._m2_bend_zk
         if self._m2_fea_zk is not None:
             m2_zk += self._m2_fea_zk
-        self.m2_zk = m2_zk
+        self._m2_zk = m2_zk
 
     def _compute_camera_gravity(self):
         if self._camera_gravity_zk is not _Invalidated:
             return
-        if self.camera_zenith_angle is None:
+        if self._camera_zenith_angle is None:
             self._camera_gravity_zk = None
             return
 
-        rotation = self.camera_rotation_angle
-        zenith = self.camera_zenith_angle
+        rotation = self._camera_rotation_angle
+        zenith = self._camera_zenith_angle
         self._camera_gravity_zk = {}
         cam_data = [
             ('L1S1', 'L1_entrance'),
@@ -1317,10 +1403,10 @@ class SSTBuilder:
     def _compute_camera_temperature(self):
         if self._camera_temperature_zk is not _Invalidated:
             return
-        if self.camera_TBulk is None:
+        if self._camera_TBulk is None:
             self._camera_temperature_zk = None
             return
-        TBulk = self.camera_TBulk
+        TBulk = self._camera_TBulk
         self._camera_temperature_zk = {}
         cam_data = [
             ('L1S1', 'L1_entrance'),
@@ -1359,13 +1445,13 @@ class SSTBuilder:
             self._camera_temperature_zk[bname] = temp_zk
 
     def _consolidate_camera(self):
-        if self.camera_zk is not _Invalidated:
+        if self._camera_zk is not _Invalidated:
             return
         if (
             self._camera_gravity_zk is None
             and self._camera_temperature_zk is None
         ):
-            self.camera_zk = None
+            self._camera_zk = None
             return
         zk = {}
         for bname, radius in [
@@ -1381,10 +1467,10 @@ class SSTBuilder:
                 zk[bname][0][:] += self._camera_gravity_zk[bname]
             if self._camera_temperature_zk is not None:
                 zk[bname][0][:] += self._camera_temperature_zk[bname]
-        self.camera_zk = zk
+        self._camera_zk = zk
 
     def _apply_rigid_body_perturbations(self, optic):
-        dof = self.dof
+        dof = self._dof
         if np.any(dof[0:3]):
             optic = optic.withGloballyShiftedOptic(
                 "M2",
@@ -1418,47 +1504,47 @@ class SSTBuilder:
     def _apply_surface_perturbations(self, optic):
         # M1
         components = [optic['M1'].surface]
-        if np.any(self.m1_grid):
+        if np.any(self._m1_grid):
             components.append(
-                batoid.Bicubic(*self.m1_grid_xy, *self.m1_grid)
+                batoid.Bicubic(*self.m1_grid_xy, *self._m1_grid)
             )
-        if np.any(self.m1m3_zk):
+        if np.any(self._m1m3_zk):
             components.append(
-                batoid.Zernike(self.m1m3_zk, R_outer=4.18)
+                batoid.Zernike(self._m1m3_zk, R_outer=4.18)
             )
         if len(components) > 1:
             optic = optic.withSurface('M1', batoid.Sum(components))
 
         # M3
         components = [optic['M3'].surface]
-        if np.any(self.m3_grid):
+        if np.any(self._m3_grid):
             components.append(
-                batoid.Bicubic(*self.m3_grid_xy, *self.m3_grid)
+                batoid.Bicubic(*self.m3_grid_xy, *self._m3_grid)
             )
-        if np.any(self.m1m3_zk):
+        if np.any(self._m1m3_zk):
             components.append(
                 # Note, using M1 R_outer here intentionally.
-                batoid.Zernike(self.m1m3_zk, R_outer=4.18)
+                batoid.Zernike(self._m1m3_zk, R_outer=4.18)
             )
         if len(components) > 1:
             optic = optic.withSurface('M3', batoid.Sum(components))
 
         # M2
         components = [optic['M2'].surface]
-        if np.any(self.m2_grid):
+        if np.any(self._m2_grid):
             components.append(
-                batoid.Bicubic(*self.m2_grid_xy, *self.m2_grid)
+                batoid.Bicubic(*self.m2_grid_xy, *self._m2_grid)
             )
-        if np.any(self.m2_zk):
+        if np.any(self._m2_zk):
             components.append(
-                batoid.Zernike(self.m2_zk, R_outer=1.71)
+                batoid.Zernike(self._m2_zk, R_outer=1.71)
             )
         if len(components) > 1:
             optic = optic.withSurface('M2', batoid.Sum(components))
 
         # Camera
-        if self.camera_zk is not None:
-            for k, (zk, radius) in self.camera_zk.items():
+        if self._camera_zk is not None:
+            for k, (zk, radius) in self._camera_zk.items():
                 optic = optic.withSurface(
                     k,
                     batoid.Sum([
