@@ -1477,7 +1477,7 @@ class SSTBuilder:
                 np.array([dof[1], dof[2], -dof[0]])*1e-6
             )
 
-        if np.any(dof[3:5] != 0):
+        if np.any(dof[3:5]):
             rx = batoid.RotX(np.deg2rad(-dof[3]/3600))
             ry = batoid.RotY(np.deg2rad(-dof[4]/3600))
             optic = optic.withLocallyRotatedOptic(
@@ -1485,13 +1485,13 @@ class SSTBuilder:
                 rx @ ry
             )
 
-        if np.any(dof[5:8] != 0):
+        if np.any(dof[5:8]):
             optic = optic.withGloballyShiftedOptic(
                 self.cam_name,
                 np.array([dof[6], dof[7], -dof[5]])*1e-6
             )
 
-        if np.any(dof[8:10] != 0):
+        if np.any(dof[8:10]):
             rx = batoid.RotX(np.deg2rad(-dof[8]/3600))
             ry = batoid.RotY(np.deg2rad(-dof[9]/3600))
             optic = optic.withLocallyRotatedOptic(
