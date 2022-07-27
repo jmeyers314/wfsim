@@ -538,22 +538,17 @@ class SSTFactory:
 class _Invalidated:
     pass
 
+
 class SSTBuilder:
     # Use some class variables to store things that can be shared amongst
     # instances.
-    _m1m3_fea_x = None
-    _m1m3_fea_y = None
-    _m1m3_fea_idx1 = None
-    _m1m3_fea_idx3 = None
-    _m1_grid_x = None
-    _m1_grid_y = None
-    _m3_grid_x = None
-    _m3_grid_y = None
+    _m1m3_fea_xy = None
+    _m1m3_fea_idx13 = None
+    _m1_grid_xy = None
+    _m3_grid_xy = None
 
-    _m2_fea_x = None
-    _m2_fea_y = None
-    _m2_grid_x = None
-    _m2_grid_y = None
+    _m2_fea_xy = None
+    _m2_grid_xy = None
 
     # Some class methods to load them
     def _load_m1m3(cls):
@@ -564,102 +559,57 @@ class SSTBuilder:
         by = data[:, 2]
         idx1 = (idx == 1)
         idx3 = (idx == 3)
-        cls._m1m3_fea_x = bx
-        cls._m1m3_fea_y = by
-        cls._m1m3_fea_idx1 = idx1
-        cls._m1m3_fea_idx3 = idx3
+        cls._m1m3_fea_xy = bx, by
+        cls._m1m3_fea_idx13 = idx1, idx3
         # Grid coords
-        data = _fits_cache("M1_bend_coords.fits.gz")
-        cls._m1_grid_x = data[0]
-        cls._m1_grid_y = data[1]
-        data = _fits_cache("M3_bend_coords.fits.gz")
-        cls._m3_grid_x = data[0]
-        cls._m3_grid_y = data[1]
+        cls._m1_grid_xy = _fits_cache("M1_bend_coords.fits.gz")
+        cls._m3_grid_xy = _fits_cache("M3_bend_coords.fits.gz")
 
     @property
-    def m1m3_fea_x(self):
-        if self._m1m3_fea_x is None:
+    def m1m3_fea_xy(self):
+        if self._m1m3_fea_xy is None:
             self._load_m1m3()
-        return self._m1m3_fea_x
+        return self._m1m3_fea_xy
 
     @property
-    def m1m3_fea_y(self):
-        if self._m1m3_fea_y is None:
+    def m1m3_fea_idx13(self):
+        if self._m1m3_fea_idx13 is None:
             self._load_m1m3()
-        return self._m1m3_fea_y
+        return self._m1m3_fea_idx13
 
     @property
-    def m1m3_fea_idx1(self):
-        if self._m1m3_fea_idx1 is None:
+    def m1_grid_xy(self):
+        if self._m1_grid_xy is None:
             self._load_m1m3()
-        return self._m1m3_fea_idx1
+        return self._m1_grid_xy
 
     @property
-    def m1m3_fea_idx3(self):
-        if self._m1m3_fea_idx3 is None:
+    def m3_grid_xy(self):
+        if self._m3_grid_xy is None:
             self._load_m1m3()
-        return self._m1m3_fea_idx3
-
-    @property
-    def m1_grid_x(self):
-        if self._m1_grid_x is None:
-            self._load_m1m3()
-        return self._m1_grid_x
-
-    @property
-    def m1_grid_y(self):
-        if self._m1_grid_y is None:
-            self._load_m1m3()
-        return self._m1_grid_y
-
-    @property
-    def m3_grid_x(self):
-        if self._m3_grid_x is None:
-            self._load_m1m3()
-        return self._m3_grid_x
-
-    @property
-    def m3_grid_y(self):
-        if self._m3_grid_y is None:
-            self._load_m1m3()
-        return self._m3_grid_y
+        return self._m3_grid_xy
 
     def _load_m2(cls):
         # FEA nodes
         data = _fits_cache("M2_1um_grid.fits.gz")  # (15984, 75)
         bx = -data[:, 1]  # meters
         by = data[:, 2]
-        cls._m2_fea_x = bx
-        cls._m2_fea_y = by
+        cls._m2_fea_xy = bx, by
 
         # Grid coords
-        data = _fits_cache("M2_bend_coords.fits.gz")
-        cls._m2_grid_x = data[0]
-        cls._m2_grid_y = data[1]
+        cls._m2_grid_xy = _fits_cache("M2_bend_coords.fits.gz")
 
     @property
-    def m2_fea_x(self):
-        if self._m2_fea_x is None:
+    def m2_fea_xy(self):
+        if self._m2_fea_xy is None:
             self._load_m2()
-        return self._m2_fea_x
+        return self._m2_fea_xy
 
     @property
-    def m2_fea_y(self):
-        if self._m2_fea_y is None:
+    def m2_grid_xy(self):
+        if self._m2_grid_xy is None:
             self._load_m2()
-        return self._m2_fea_y
-
-    @property
-    def m2_grid_x(self):
-        if self._m2_grid_x is None:
-            self._load_m2()
-        return self._m2_grid_x
-
-    @property
-    def m2_grid_y(self):
-        if self._m2_grid_y is None:
-            self._load_m2()
-        return self._m2_grid_y
+        return self._m2_grid_xy
 
     def __init__(self, fiducial):
         """Create a Simony Survey Telescope builder.
@@ -994,10 +944,8 @@ class SSTBuilder:
 
         # Interpolate these node displacements into z-displacements at
         # original node x/y positions.
-        bx = self.m1m3_fea_x
-        by = self.m1m3_fea_y
-        idx1 = self.m1m3_fea_idx1
-        idx3 = self.m1m3_fea_idx3
+        bx, by = self.m1m3_fea_xy
+        idx1, idx3 = self.m1m3_fea_idx13
 
         # M1
         zRef = self.fiducial['M1'].surface.sag(bx[idx1], by[idx1])
@@ -1039,8 +987,7 @@ class SSTBuilder:
             self._m1m3_fea_temperature = None
             return
 
-        bx = self.m1m3_fea_x
-        by = self.m1m3_fea_y
+        bx, by = self.m1m3_fea_xy
         normX = bx / 4.18
         normY = by / 4.18
 
@@ -1119,10 +1066,8 @@ class SSTBuilder:
             m1m3_fea += self._m1m3_fea_lut
 
         if np.any(m1m3_fea):
-            bx = self.m1m3_fea_x
-            by = self.m1m3_fea_y
-            idx1 = self.m1m3_fea_idx1
-            idx3 = self.m1m3_fea_idx3
+            bx, by = self.m1m3_fea_xy
+            idx1, idx3 = self.m1m3_fea_idx13
             zBasis = galsim.zernike.zernikeBasis(
                 28, -bx, by, R_outer=4.18
             )
@@ -1130,14 +1075,12 @@ class SSTBuilder:
             zern = galsim.zernike.Zernike(m1m3_zk, R_outer=4.18)
             m1m3_fea -= zern(-bx, by)
 
-            m1_grid_coords = np.vstack([self.m1_grid_x, self.m1_grid_y])
-            m3_grid_coords = np.vstack([self.m3_grid_x, self.m3_grid_y])
             m1_grid = _node_to_grid(
-                bx[idx1], by[idx1], m1m3_fea[idx1], m1_grid_coords
+                bx[idx1], by[idx1], m1m3_fea[idx1], self.m1_grid_xy
             )
 
             m3_grid = _node_to_grid(
-                bx[idx3], by[idx3], m1m3_fea[idx3], m3_grid_coords
+                bx[idx3], by[idx3], m1m3_fea[idx3], self.m3_grid_xy
             )
             m1_grid *= -1
             m3_grid *= -1
@@ -1269,17 +1212,15 @@ class SSTBuilder:
             m2_fea += self._m2_fea_temperature
 
         if np.any(m2_fea):
-            bx = self.m2_fea_x
-            by = self.m2_fea_y
+            bx, by = self.m2_fea_xy
             zBasis = galsim.zernike.zernikeBasis(
                 28, -bx, by, R_outer=1.71
             )
             m2_zk, *_ = np.linalg.lstsq(zBasis.T, m2_fea, rcond=None)
             zern = galsim.zernike.Zernike(m2_zk, R_outer=1.71)
             m2_fea -= zern(-bx, by)
-            m2_grid_coords = np.vstack([self.m2_grid_x, self.m2_grid_y])
             m2_grid = _node_to_grid(
-                bx, by, m2_fea, m2_grid_coords
+                bx, by, m2_fea, self.m2_grid_xy
             )
             m2_grid *= -1
             m2_zk *= -1
@@ -1479,7 +1420,7 @@ class SSTBuilder:
         components = [optic['M1'].surface]
         if np.any(self.m1_grid):
             components.append(
-                batoid.Bicubic(self.m1_grid_x, self.m1_grid_y, *self.m1_grid)
+                batoid.Bicubic(*self.m1_grid_xy, *self.m1_grid)
             )
         if np.any(self.m1m3_zk):
             components.append(
@@ -1492,7 +1433,7 @@ class SSTBuilder:
         components = [optic['M3'].surface]
         if np.any(self.m3_grid):
             components.append(
-                batoid.Bicubic(self.m3_grid_x, self.m3_grid_y, *self.m3_grid)
+                batoid.Bicubic(*self.m3_grid_xy, *self.m3_grid)
             )
         if np.any(self.m1m3_zk):
             components.append(
@@ -1506,7 +1447,7 @@ class SSTBuilder:
         components = [optic['M2'].surface]
         if np.any(self.m2_grid):
             components.append(
-                batoid.Bicubic(self.m2_grid_x, self.m2_grid_y, *self.m2_grid)
+                batoid.Bicubic(*self.m2_grid_xy, *self.m2_grid)
             )
         if np.any(self.m2_zk):
             components.append(
