@@ -305,7 +305,7 @@ class WFApp:
             cmap='seismic',
             extent=np.r_[1, -1, 1, -1]*4.18
         )
-        self.wfp_ax.set_title("Perturbed Wavefront", color='w')
+        self.wfp_ax.set_title("Wavefront", color='w')
 
         self.wfr_ax = axes[0,1]
         self.wfr_img = self.wfr_ax.imshow(
@@ -345,6 +345,9 @@ class WFApp:
         # Get the telescopes
         builder = SSTBuilder(self.fiducial)
         tel0 = builder.build()
+        tel0 = tel0.withLocallyRotatedOptic(
+            "LSSTCamera", batoid.RotZ(np.deg2rad(self.rotation))
+        )
 
         if self.do_M1M3_gravity:
             builder = builder.with_m1m3_gravity(
@@ -390,6 +393,9 @@ class WFApp:
             builder = builder.with_aos_dof(dof)
 
         tel1 = builder.build()
+        tel1 = tel1.withLocallyRotatedOptic(
+            "LSSTCamera", batoid.RotZ(np.deg2rad(self.rotation))
+        )
 
         # Update wavefront
         wf0 = sub_ptt(batoid.wavefront(
