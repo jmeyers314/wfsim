@@ -660,6 +660,10 @@ class SSTBuilder:
         return self._m2_TrGrad
 
     @property
+    def m2_lut_zenith_angle(self):
+        return self._m2_lut_zenith_angle
+
+    @property
     def camera_zenith_angle(self):
         return self._camera_zenith_angle
 
@@ -732,6 +736,7 @@ class SSTBuilder:
         self._m2_zenith_angle = None
         self._m2_TzGrad = None
         self._m2_TrGrad = None
+        self._m2_lut_zenith_angle = None
 
         self._camera_zenith_angle = None
         self._camera_rotation_angle = None
@@ -766,6 +771,7 @@ class SSTBuilder:
         self._m2_fea_temperature = None
         self._m2_bend_grid = None
         self._m2_bend_zk = None
+        self._m2_fea_lut = None
 
         self._m2_fea_grid = None
         self._m2_fea_zk = None
@@ -934,6 +940,33 @@ class SSTBuilder:
         ret._m2_fea_zk = _Invalidated
         ret._m2_grid = _Invalidated
         ret._m2_zk = _Invalidated
+        return ret
+
+    def with_m2_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes LUT perturbations of M2.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+        error : float, optional
+            Fractional error to apply to LUT forces.
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with M1M3 LUT applied.
+        """
+        ret = copy(self)
+        ret._m2_lut_zenith_angle = zenith_angle
+
+        ret._m2_fea_lut = _Invalidated
+        ret._m2_fea_temperature = _Invalidated
+        ret._m2_fea_grid = _Invalidated
+        ret._m2_fea_zk = _Invalidated
+        ret._m2_grid = _Invalidated
+        ret._m2_zk = _Invalidated
+
         return ret
 
     def with_camera_gravity(self, zenith_angle, rotation_angle):
@@ -1281,6 +1314,50 @@ class SSTBuilder:
 
         self._m2_fea_temperature = out
 
+    def _compute_m2_lut(self):
+        if self._m2_fea_lut is not _Invalidated:
+            return
+        from scipy.interpolate import interp1d
+        
+        num_actuators = 78
+        num_tangent = 6
+        num_axial_actuators = num_actuators - num_tangent
+        LUT_force = np.zeros(num_actuators)
+
+        #LUT_force_elevation
+        data = _fits_cache("M2_LUT_F_E.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            25
+        )
+
+        #LUT_force_0g_component
+        data = _fits_cache("M2_LUT_F_0.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            25
+        )
+
+        #LUT_force_factory_offset
+        data = _fits_cache("M2_LUT_F_F.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            25
+        )
+
+        #LUT_force_actuator_bias
+        data = _fits_cache("M2_LUT_F_A.fits.gz")
+        LUT_force += interp1d(data[0], data[1:])(
+            25
+        )
+
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        zf, hf = data[0:2]
+
+        u0 = zf * (np.cos(self._m2_zenith_angle) - 1)
+        u0 += hf * np.sin(self._m2_zenith_angle)
+        u0 *= 1e-6  # micron -> meters
+
+        G = _fits_cache("M2_1um_grid.fits.gz")
+        self._m2_fea_lut = G.dot(LUT_force[:75]) - u0
+
     def _consolidate_m2_fea(self):
         if self._m2_fea_grid is not _Invalidated:
             return
@@ -1569,6 +1646,7 @@ class SSTBuilder:
 
         self._compute_m2_gravity()
         self._compute_m2_temperature()
+        self._compute_m2_lut()
         self._consolidate_m2_fea()
         self._compute_m2_bend()
         self._consolidate_m2_grid()
