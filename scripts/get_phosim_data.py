@@ -22,7 +22,8 @@ def readzgrid(fn, scale):
     d2zdxdy = np.flipud(d2zdxdy.reshape(204, 204)) * 1e3 * scale
     return x, y, z, dzdx, dzdy, d2zdxdy
 
-phosim_data_dir = "/Users/josh/src/phosim/data/lsst/"
+# data_dir = "/Users/josh/src/phosim/data/lsst/"
+data_dir = "/Users/josh/sandbox/validate_bend/new_bend/"
 
 M1x = None
 M1y = None
@@ -51,33 +52,33 @@ M2zk = np.zeros((20, 29))
 
 for i in tqdm(range(20)):
     m1fn = os.path.join(
-        phosim_data_dir,
+        data_dir,
         f"M1_b{i+1}_0.50_grid.DAT"
     )
     M1x, M1y, M1z[i], M1dzdx[i], M1dzdy[i], M1d2zdxdy[i] = readzgrid(m1fn, -1 / 0.5)
 
     m2fn = os.path.join(
-        phosim_data_dir,
+        data_dir,
         f"M2_b{i+1}_0.25_grid.DAT"
     )
     M2x, M2y, M2z[i], M2dzdx[i], M2dzdy[i], M2d2zdxdy[i] = readzgrid(m2fn, -1 / 0.25)
 
     m3fn = os.path.join(
-        phosim_data_dir,
+        data_dir,
         f"M3_b{i+1}_0.50_grid.DAT"
     )
     M3x, M3y, M3z[i], M3dzdx[i], M3dzdy[i], M3d2zdxdy[i] = readzgrid(m3fn, -1 / 0.5)
 
     M1M3zk[i, 1:] = np.loadtxt(
         os.path.join(
-            phosim_data_dir,
+            data_dir,
             f"M13_b{i+1}_0.50_gridz.txt"
         )
     ) * -1 * 1e-3 / 0.5
 
     M2zk[i, 1:] = np.loadtxt(
         os.path.join(
-            phosim_data_dir,
+            data_dir,
             f"M2_b{i+1}_0.25_gridz.txt"
         )
     ) * -1 * 1e-3 / 0.25
