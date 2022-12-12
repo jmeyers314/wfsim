@@ -1327,25 +1327,25 @@ class SSTBuilder:
         #LUT_force_elevation
         data = _fits_cache("M2_LUT_F_E.fits.gz")
         LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
-            25
+            np.rad2deg(self._m2_lut_zenith_angle)
         )
 
         #LUT_force_0g_component
         data = _fits_cache("M2_LUT_F_0.fits.gz")
         LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
-            25
+            np.rad2deg(self._m2_lut_zenith_angle)
         )
 
         #LUT_force_factory_offset
         data = _fits_cache("M2_LUT_F_F.fits.gz")
         LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
-            25
+            np.rad2deg(self._m2_lut_zenith_angle)
         )
 
         #LUT_force_actuator_bias
         data = _fits_cache("M2_LUT_F_A.fits.gz")
         LUT_force += interp1d(data[0], data[1:])(
-            25
+            np.rad2deg(self._m2_lut_zenith_angle)
         )
 
         data = _fits_cache("M2_GT_grid.fits.gz")
@@ -1356,7 +1356,7 @@ class SSTBuilder:
         u0 *= 1e-6  # micron -> meters
 
         G = _fits_cache("M2_1um_grid.fits.gz")
-        self._m2_fea_lut = G.dot(LUT_force[:75]) - u0
+        self._m2_fea_lut = G.dot(LUT_force[:75] - u0) 
 
     def _consolidate_m2_fea(self):
         if self._m2_fea_grid is not _Invalidated:
@@ -1364,6 +1364,7 @@ class SSTBuilder:
         if (
             self._m2_fea_gravity is None
             and self._m2_fea_temperature is None
+            and self._m2_fea_lut is None
         ):
             self._m2_fea_grid = None
             self._m2_fea_zk = None
@@ -1373,6 +1374,8 @@ class SSTBuilder:
             m2_fea = self._m2_fea_gravity
         if self._m2_fea_temperature is not None:
             m2_fea += self._m2_fea_temperature
+        if self._m2_fea_lut is not None:
+            m2_fea += self._m2_fea_lut
 
         if np.any(m2_fea):
             bx, by = self.m2_fea_xy
