@@ -664,6 +664,10 @@ class SSTBuilder:
         return self._m2_lut_zenith_angle
 
     @property
+    def m2_hexapod_lut_zenith_angle(self):
+        return self._m2_hexapod_lut_zenith_angle
+
+    @property
     def camera_zenith_angle(self):
         return self._camera_zenith_angle
 
@@ -737,6 +741,7 @@ class SSTBuilder:
         self._m2_TzGrad = None
         self._m2_TrGrad = None
         self._m2_lut_zenith_angle = None
+        self._m2_hexapod_lut_zenith_angle = None
 
         self._camera_zenith_angle = None
         self._camera_rotation_angle = None
@@ -969,6 +974,25 @@ class SSTBuilder:
 
         return ret
 
+    def with_m2_hexapod_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes M2 Hexapods LUT corrections.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with M2 hexapod LUT applied.
+        """
+        ret = copy(self)
+        ret._m2_heaxpod_lut_zenith_angle = zenith_angle
+        ret._m2_hexapod_lut = _Invalidated
+
+        return ret
+
     def with_camera_gravity(self, zenith_angle, rotation_angle):
         """Return new SSTBuilder that includes gravitational flexure of camera.
 
@@ -1008,6 +1032,25 @@ class SSTBuilder:
         ret._camera_TBulk = camera_TBulk
         ret._camera_temperature_zk = _Invalidated
         ret._camera_zk = _Invalidated
+        return ret
+
+    def with_camera_hexapod_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes Camera Hexapods LUT corrections.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with camera hexapod LUT applied.
+        """
+        ret = copy(self)
+        ret._camera_zenith_angle = zenith_angle
+        ret._camera_hexapod_lut = _Invalidated
+
         return ret
 
     def with_aos_dof(self, dof):
@@ -1581,6 +1624,58 @@ class SSTBuilder:
 
         return optic
 
+    def _apply_m2_hexapod_lut(self, optic):
+        if self._m2_hexapod_lut is not _Invalidated:
+            return
+
+        from scipy.interpolate import interp1d
+        data = _fits_cache("M2_Hexapod_LUT.fits.gz")
+        dof_M2 = interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_heaxpod_lut_zenith_angle)
+        )
+
+        if np.any(dof_M2[0:3]):
+            optic = optic.withGloballyShiftedOptic(
+                "M2",
+                np.array([dof_M2[1], dof_M2[2], -dof_M2[0]])*1e-6
+            )
+
+        if np.any(dof_M2[3:5]):
+            rx = batoid.RotX(np.deg2rad(-dof_M2[3]/3600))
+            ry = batoid.RotY(np.deg2rad(-dof_M2[4]/3600))
+            optic = optic.withLocallyRotatedOptic(
+                "M2",
+                rx @ ry
+            )
+
+        return optic
+    
+    def _apply_camera_hexapod_lut(self, optic):
+        if self._camera_hexapod_lut is not _Invalidated:
+            return
+
+        from scipy.interpolate import interp1d
+        data = _fits_cache("Camera_Hexapod_LUT.fits.gz")
+        dof_cam = interp1d(data[0], data[1:])(
+            np.rad2deg(self._camera_zenith_angle)
+        )
+
+        if np.any(dof_cam[0:3]):
+            optic = optic.withGloballyShiftedOptic(
+                self.cam_name,
+                np.array([dof_cam[0], dof_cam[1], -dof_cam[2]])*1e-6
+            )
+
+        if np.any(dof_cam[3:5]):
+            rx = batoid.RotX(np.deg2rad(-dof_cam[3]/3600))
+            ry = batoid.RotY(np.deg2rad(-dof_cam[4]/3600))
+            optic = optic.withLocallyRotatedOptic(
+                self.cam_name,
+                rx @ ry
+            )
+
+        return optic
+
     def _apply_surface_perturbations(self, optic):
         # M1
         components = [optic['M1'].surface]
@@ -1660,6 +1755,8 @@ class SSTBuilder:
         self._consolidate_camera()
 
         optic = self.fiducial
+        optic = self._apply_m2_hexapod_lut(optic)
+        optic = self._apply_camera_hexapod_lut(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_surface_perturbations(optic)
         return optic
