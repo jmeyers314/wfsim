@@ -1349,14 +1349,14 @@ class SSTBuilder:
         )
 
         data = _fits_cache("M2_GT_grid.fits.gz")
-        zf, hf = data[0:2]
+        zdz, hdz = data[0:2]
 
-        u0 = zf * (np.cos(self._m2_zenith_angle) - 1)
-        u0 += hf * np.sin(self._m2_zenith_angle)
+        u0 = zdz * (np.cos(self._m2_zenith_angle) - 1)
+        u0 += hdz * np.sin(self._m2_zenith_angle)
         u0 *= 1e-6  # micron -> meters
 
-        G = _fits_cache("M2_1um_grid.fits.gz")
-        self._m2_fea_lut = G.dot(LUT_force[:75] - u0) 
+        G = _fits_cache("M2_1um_grid.fits.gz")*1e-6 # micron -> meters
+        self._m2_fea_lut = G.dot(LUT_force[:75])  - u0
 
     def _consolidate_m2_fea(self):
         if self._m2_fea_grid is not _Invalidated:
