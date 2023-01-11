@@ -1506,7 +1506,11 @@ class SSTBuilder:
         components = [optic['M1'].surface]
         if np.any(self._m1_grid):
             components.append(
-                batoid.Bicubic(*self.m1_grid_xy, *self._m1_grid)
+                batoid.Bicubic(
+                    *self.m1_grid_xy,
+                    *self._m1_grid,
+                    nanpolicy='zero'
+                )
             )
         if np.any(self._m1m3_zk):
             components.append(
@@ -1519,7 +1523,11 @@ class SSTBuilder:
         components = [optic['M3'].surface]
         if np.any(self._m3_grid):
             components.append(
-                batoid.Bicubic(*self.m3_grid_xy, *self._m3_grid)
+                batoid.Bicubic(
+                    *self.m3_grid_xy,
+                    *self._m3_grid,
+                    nanpolicy='zero'
+                )
             )
         if np.any(self._m1m3_zk):
             components.append(
@@ -1533,7 +1541,11 @@ class SSTBuilder:
         components = [optic['M2'].surface]
         if np.any(self._m2_grid):
             components.append(
-                batoid.Bicubic(*self.m2_grid_xy, *self._m2_grid)
+                batoid.Bicubic(
+                    *self.m2_grid_xy,
+                    *self._m2_grid,
+                    nanpolicy='zero'
+                )
             )
         if np.any(self._m2_zk):
             components.append(
