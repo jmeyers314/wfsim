@@ -660,6 +660,14 @@ class SSTBuilder:
         return self._m2_TrGrad
 
     @property
+    def m2_lut_zenith_angle(self):
+        return self._m2_lut_zenith_angle
+
+    @property
+    def m2_hexapod_lut_zenith_angle(self):
+        return self._m2_hexapod_lut_zenith_angle
+
+    @property
     def camera_zenith_angle(self):
         return self._camera_zenith_angle
 
@@ -732,6 +740,8 @@ class SSTBuilder:
         self._m2_zenith_angle = None
         self._m2_TzGrad = None
         self._m2_TrGrad = None
+        self._m2_lut_zenith_angle = None
+        self._m2_hexapod_lut_zenith_angle = None
 
         self._camera_zenith_angle = None
         self._camera_rotation_angle = None
@@ -766,6 +776,7 @@ class SSTBuilder:
         self._m2_fea_temperature = None
         self._m2_bend_grid = None
         self._m2_bend_zk = None
+        self._m2_fea_lut = None
 
         self._m2_fea_grid = None
         self._m2_fea_zk = None
@@ -936,6 +947,52 @@ class SSTBuilder:
         ret._m2_zk = _Invalidated
         return ret
 
+    def with_m2_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes LUT perturbations of M2.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+        error : float, optional
+            Fractional error to apply to LUT forces.
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with M1M3 LUT applied.
+        """
+        ret = copy(self)
+        ret._m2_lut_zenith_angle = zenith_angle
+
+        ret._m2_fea_lut = _Invalidated
+        ret._m2_fea_temperature = _Invalidated
+        ret._m2_fea_grid = _Invalidated
+        ret._m2_fea_zk = _Invalidated
+        ret._m2_grid = _Invalidated
+        ret._m2_zk = _Invalidated
+
+        return ret
+
+    def with_m2_hexapod_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes M2 Hexapods LUT corrections.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with M2 hexapod LUT applied.
+        """
+        ret = copy(self)
+        ret._m2_heaxpod_lut_zenith_angle = zenith_angle
+        ret._m2_hexapod_lut = _Invalidated
+
+        return ret
+
     def with_camera_gravity(self, zenith_angle, rotation_angle):
         """Return new SSTBuilder that includes gravitational flexure of camera.
 
@@ -975,6 +1032,25 @@ class SSTBuilder:
         ret._camera_TBulk = camera_TBulk
         ret._camera_temperature_zk = _Invalidated
         ret._camera_zk = _Invalidated
+        return ret
+
+    def with_camera_hexapod_lut(self, zenith_angle):
+        """Return new SSTBuilder that includes Camera Hexapods LUT corrections.
+
+        Parameters
+        ----------
+        zenith_angle : float
+            Zenith angle in radians
+
+        Returns
+        -------
+        ret : SSTBuilder
+            New builder with camera hexapod LUT applied.
+        """
+        ret = copy(self)
+        ret._camera_zenith_angle = zenith_angle
+        ret._camera_hexapod_lut = _Invalidated
+
         return ret
 
     def with_aos_dof(self, dof):
@@ -1281,12 +1357,57 @@ class SSTBuilder:
 
         self._m2_fea_temperature = out
 
+    def _compute_m2_lut(self):
+        if self._m2_fea_lut is not _Invalidated:
+            return
+        from scipy.interpolate import interp1d
+        
+        num_actuators = 78
+        num_tangent = 6
+        num_axial_actuators = num_actuators - num_tangent
+        LUT_force = np.zeros(num_actuators)
+
+        #LUT_force_elevation
+        data = _fits_cache("M2_LUT_F_E.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_lut_zenith_angle)
+        )
+
+        #LUT_force_0g_component
+        data = _fits_cache("M2_LUT_F_0.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_lut_zenith_angle)
+        )
+
+        #LUT_force_factory_offset
+        data = _fits_cache("M2_LUT_F_F.fits.gz")
+        LUT_force[:num_axial_actuators] += interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_lut_zenith_angle)
+        )
+
+        #LUT_force_actuator_bias
+        data = _fits_cache("M2_LUT_F_A.fits.gz")
+        LUT_force += interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_lut_zenith_angle)
+        )
+
+        data = _fits_cache("M2_GT_grid.fits.gz")
+        zdz, hdz = data[0:2]
+
+        u0 = zdz * (np.cos(self._m2_zenith_angle) - 1)
+        u0 += hdz * np.sin(self._m2_zenith_angle)
+        u0 *= 1e-6  # micron -> meters
+
+        G = _fits_cache("M2_1um_grid.fits.gz")*1e-6 # micron -> meters
+        self._m2_fea_lut = G.dot(LUT_force[:75])  - u0
+
     def _consolidate_m2_fea(self):
         if self._m2_fea_grid is not _Invalidated:
             return
         if (
             self._m2_fea_gravity is None
             and self._m2_fea_temperature is None
+            and self._m2_fea_lut is None
         ):
             self._m2_fea_grid = None
             self._m2_fea_zk = None
@@ -1296,6 +1417,8 @@ class SSTBuilder:
             m2_fea = self._m2_fea_gravity
         if self._m2_fea_temperature is not None:
             m2_fea += self._m2_fea_temperature
+        if self._m2_fea_lut is not None:
+            m2_fea += self._m2_fea_lut
 
         if np.any(m2_fea):
             bx, by = self.m2_fea_xy
@@ -1501,6 +1624,58 @@ class SSTBuilder:
 
         return optic
 
+    def _apply_m2_hexapod_lut(self, optic):
+        if self._m2_hexapod_lut is not _Invalidated:
+            return
+
+        from scipy.interpolate import interp1d
+        data = _fits_cache("M2_Hexapod_LUT.fits.gz")
+        dof_M2 = interp1d(data[0], data[1:])(
+            np.rad2deg(self._m2_heaxpod_lut_zenith_angle)
+        )
+
+        if np.any(dof_M2[0:3]):
+            optic = optic.withGloballyShiftedOptic(
+                "M2",
+                np.array([dof_M2[1], dof_M2[2], -dof_M2[0]])*1e-6
+            )
+
+        if np.any(dof_M2[3:5]):
+            rx = batoid.RotX(np.deg2rad(-dof_M2[3]/3600))
+            ry = batoid.RotY(np.deg2rad(-dof_M2[4]/3600))
+            optic = optic.withLocallyRotatedOptic(
+                "M2",
+                rx @ ry
+            )
+
+        return optic
+    
+    def _apply_camera_hexapod_lut(self, optic):
+        if self._camera_hexapod_lut is not _Invalidated:
+            return
+
+        from scipy.interpolate import interp1d
+        data = _fits_cache("Camera_Hexapod_LUT.fits.gz")
+        dof_cam = interp1d(data[0], data[1:])(
+            np.rad2deg(self._camera_zenith_angle)
+        )
+
+        if np.any(dof_cam[0:3]):
+            optic = optic.withGloballyShiftedOptic(
+                self.cam_name,
+                np.array([dof_cam[0], dof_cam[1], -dof_cam[2]])*1e-6
+            )
+
+        if np.any(dof_cam[3:5]):
+            rx = batoid.RotX(np.deg2rad(-dof_cam[3]/3600))
+            ry = batoid.RotY(np.deg2rad(-dof_cam[4]/3600))
+            optic = optic.withLocallyRotatedOptic(
+                self.cam_name,
+                rx @ ry
+            )
+
+        return optic
+
     def _apply_surface_perturbations(self, optic):
         # M1
         components = [optic['M1'].surface]
@@ -1581,6 +1756,7 @@ class SSTBuilder:
 
         self._compute_m2_gravity()
         self._compute_m2_temperature()
+        self._compute_m2_lut()
         self._consolidate_m2_fea()
         self._compute_m2_bend()
         self._consolidate_m2_grid()
@@ -1591,6 +1767,8 @@ class SSTBuilder:
         self._consolidate_camera()
 
         optic = self.fiducial
+        optic = self._apply_m2_hexapod_lut(optic)
+        optic = self._apply_camera_hexapod_lut(optic)
         optic = self._apply_rigid_body_perturbations(optic)
         optic = self._apply_surface_perturbations(optic)
         return optic
